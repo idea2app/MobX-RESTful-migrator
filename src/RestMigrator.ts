@@ -1,18 +1,20 @@
+import { ListModel } from 'mobx-restful';
 import {
-  ListModelConstructor,
+  ListModelClass,
   MigrationConfig,
   MigrationProgress,
-  CrossTableResolver
+  CrossTableResolver,
+  TargetPatch
 } from './types';
 
 export class RestMigrator<TSource = any> {
   private dataSource: AsyncIterable<TSource>;
-  private targetModel: ListModelConstructor;
+  private targetModel: ListModelClass;
   private fieldMapping: MigrationConfig<TSource>;
 
   constructor(
     dataSource: AsyncIterable<TSource>,
-    targetModel: ListModelConstructor,
+    targetModel: ListModelClass,
     fieldMapping: MigrationConfig<TSource>
   ) {
     this.dataSource = dataSource;
@@ -24,36 +26,16 @@ export class RestMigrator<TSource = any> {
    * Main migration method that yields progress information
    */
   async *boot(): AsyncGenerator<MigrationProgress, void, unknown> {
-    let processed = 0;
-    
-    try {
-      for await (const sourceItem of this.dataSource) {
-        try {
-          const mappedData = await this.mapFields(sourceItem);
-          
-          // Create and save the target model instance
-          const targetInstance = new this.targetModel();
-          Object.assign(targetInstance, mappedData);
-          
-          processed++;
-          
-          yield {
-            processed,
-            currentItem: sourceItem,
-          };
-          
-        } catch (error) {
-          yield {
-            processed,
-            currentItem: sourceItem,
-            error: error as Error,
-          };
-        }
-      }
-    } catch (error) {
+    for await (const sourceItem of this.dataSource) {
+      const mappedData = await this.mapFields(sourceItem);
+      
+      // Create and save the target model instance
+      const targetInstance = new this.targetModel();
+      Object.assign(targetInstance, mappedData);
+      
       yield {
-        processed,
-        error: error as Error,
+        processed: 0, // Let users handle counting externally
+        currentItem: sourceItem,
       };
     }
   }
@@ -65,22 +47,18 @@ export class RestMigrator<TSource = any> {
     const mappedData: Record<string, any> = {};
 
     for (const [sourceField, mapping] of Object.entries(this.fieldMapping)) {
-      try {
-        const mappedValue = await this.applyMapping(sourceData, sourceField, mapping);
-        
-        if (mappedValue !== undefined && mappedValue !== null) {
-          // Handle different mapping result types
-          if (typeof mappedValue === 'object' && !Array.isArray(mappedValue)) {
-            // For resolver functions that return objects, merge the results
-            Object.assign(mappedData, mappedValue);
-          } else {
-            // For simple mappings, use the target field name
-            const targetField = typeof mapping === 'string' ? mapping : sourceField;
-            mappedData[targetField] = mappedValue;
-          }
+      const mappedValue = await this.applyMapping(sourceData, sourceField, mapping);
+      
+      if (mappedValue !== undefined && mappedValue !== null) {
+        // Handle different mapping result types
+        if (typeof mappedValue === 'object' && !Array.isArray(mappedValue)) {
+          // For resolver functions that return objects, merge the results
+          Object.assign(mappedData, mappedValue);
+        } else {
+          // For simple mappings, use the target field name
+          const targetField = typeof mapping === 'string' ? mapping : sourceField;
+          mappedData[targetField] = mappedValue;
         }
-      } catch (error) {
-        throw new Error(`Failed to map field '${sourceField}': ${(error as Error).message}`);
       }
     }
 
@@ -122,14 +100,14 @@ export class RestMigrator<TSource = any> {
   /**
    * Checks if the mapping result is a cross-table mapping
    */
-  private isCrossTableMapping(result: any): result is ReturnType<CrossTableResolver> {
+  private isCrossTableMapping(result: any): result is TargetPatch {
     return result && typeof result === 'object' && 'model' in result;
   }
 
   /**
    * Handles cross-table relationship mapping
    */
-  private async handleCrossTableMapping(mapping: ReturnType<CrossTableResolver>): Promise<any> {
+  private async handleCrossTableMapping(mapping: TargetPatch): Promise<any> {
     const { model: RelatedModel, ...fieldData } = mapping;
     
     if (!RelatedModel) {
@@ -138,7 +116,7 @@ export class RestMigrator<TSource = any> {
 
     // Create related model instance to get indexKey
     const relatedInstance = new RelatedModel();
-    const indexKey = relatedInstance.indexKey;
+    const indexKey = (relatedInstance as ListModel<any, any>).indexKey;
     
     if (!indexKey) {
       throw new Error('Related model must have an indexKey property');
@@ -146,6 +124,7 @@ export class RestMigrator<TSource = any> {
 
     // Return the foreign key value for the relationship
     // In a real implementation, you might want to look up or create the related record
-    return fieldData[indexKey];
+    const indexKeyStr = String(indexKey);
+    return fieldData[indexKeyStr];
   }
 }

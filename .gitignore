@@ -82,11 +82,9 @@ out
 .nuxt
 dist
 
-# Build output files
-**/*.js.map
-**/*.d.ts
-**/*.d.ts.map
-examples/**/*.js
+# PNPM lock file
+pnpm-lock.yaml
+package-lock.json
 
 # Gatsby files
 .cache/
