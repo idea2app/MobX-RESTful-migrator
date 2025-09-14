@@ -82,6 +82,11 @@ out
 .nuxt
 dist
 
+# Build output files
+*.js.map
+*.d.ts
+*.d.ts.map
+
 # Gatsby files
 .cache/
 # Comment in the public line in if your project uses Gatsby and not Next.js
