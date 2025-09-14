@@ -1,0 +1,40 @@
+{
+  "name": "mobx-restful-migrator",
+  "version": "0.1.0",
+  "description": "Data Migration framework based on MobX-RESTful",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "test": "jest",
+    "lint": "eslint src --ext .ts",
+    "lint:fix": "eslint src --ext .ts --fix",
+    "prepare": "npm run build",
+    "example": "npm run build && node dist/examples/basic-usage.js"
+  },
+  "keywords": ["mobx", "restful", "migration", "data", "typescript"],
+  "author": "idea2app",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/idea2app/MobX-RESTful-migrator.git"
+  },
+  "peerDependencies": {
+    "mobx-restful": "^0.6.0"
+  },
+  "devDependencies": {
+    "@types/jest": "^29.5.0",
+    "@types/node": "^20.0.0",
+    "@typescript-eslint/eslint-plugin": "^6.0.0",
+    "@typescript-eslint/parser": "^6.0.0",
+    "eslint": "^8.0.0",
+    "jest": "^29.5.0",
+    "mobx-restful": "^0.6.0",
+    "ts-jest": "^29.1.0",
+    "typescript": "^5.0.0"
+  },
+  "files": [
+    "dist"
+  ]
+}
