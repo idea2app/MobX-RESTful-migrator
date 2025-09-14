@@ -83,9 +83,10 @@ out
 dist
 
 # Build output files
-*.js.map
-*.d.ts
-*.d.ts.map
+**/*.js.map
+**/*.d.ts
+**/*.d.ts.map
+examples/**/*.js
 
 # Gatsby files
 .cache/
