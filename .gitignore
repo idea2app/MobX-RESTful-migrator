@@ -82,8 +82,7 @@ out
 .nuxt
 dist
 
-# PNPM lock file
-pnpm-lock.yaml
+# NPM lock file
 package-lock.json
 
 # Gatsby files

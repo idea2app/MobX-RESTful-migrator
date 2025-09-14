@@ -4,14 +4,14 @@ Data Migration framework based on MobX-RESTful
 
 ## Overview
 
-MobX-RESTful-migrator is a TypeScript library that provides a flexible and powerful data migration framework built on top of MobX-RESTful's ListModel abstraction. It allows you to migrate data from various sources to MobX-RESTful models with customizable field mappings and relationships.
+MobX-RESTful-migrator is a TypeScript library that provides a flexible data migration framework built on top of MobX-RESTful's ListModel abstraction. It allows you to migrate data from various sources to MobX-RESTful models with customizable field mappings and relationships.
 
 ## Features
 
-- **Flexible Field Mappings**: Support for multiple mapping types
-- **Async Generator Pattern**: Control migration flow at your own pace
+- **Flexible Field Mappings**: Support for four different mapping types
+- **Async Generator Pattern**: Control migration flow at your own pace  
 - **Cross-table Relationships**: Handle complex data relationships
-- **Error Handling**: Comprehensive error handling and progress reporting
+- **User-Controlled Error Handling**: You manage counting and error handling externally
 - **TypeScript Support**: Full TypeScript support with type safety
 
 ## Installation
@@ -20,258 +20,238 @@ MobX-RESTful-migrator is a TypeScript library that provides a flexible and power
 npm install mobx-restful-migrator
 ```
 
-## Usage
+## Usage Example: Article Migration
 
-### Basic Example
+The typical use case is migrating article data with the following schema:
+- **Source**: Article table with Title, Keywords, Content, Author, Email fields
+- **Target**: Keywords field splits into tags array, Author/Email fields map to User table
+
+### Source Data Schema
 
 ```typescript
-import { RestMigrator } from 'mobx-restful-migrator';
+interface SourceArticle {
+  id: number;
+  title: string;
+  keywords: string;  // comma-separated keywords to split into tags
+  content: string;
+  author: string;    // maps to User table name field
+  email: string;     // maps to User table email field
+}
+```
 
-// Define your target model
-class UserModel {
-  indexKey = 'id';
-  id?: number;
-  name?: string;
+### Target Models
+
+```typescript
+import { HTTPClient } from 'koajax';
+import { ListModel } from 'mobx-restful';
+
+interface User {
+  id: number;
+  name: string;
   email?: string;
 }
 
-// Your data source (async generator)
-async function* dataSource() {
-  yield { user_id: 1, full_name: 'John Doe', email_address: 'john@example.com' };
-  yield { user_id: 2, full_name: 'Jane Smith', email_address: 'jane@example.com' };
+class UserModel extends ListModel<User> {
+  indexKey = 'id' as const;
+  client = new HTTPClient();
+  baseURI = '/api/users';
+
+  async loadPage(pageIndex: number, pageSize: number, filter: any) {
+    return {
+      pageData: [],
+      totalCount: 0,
+    };
+  }
 }
 
-// Field mapping configuration
-const fieldMapping = {
-  user_id: 'id',           // 1-to-1 mapping
-  full_name: 'name',       // 1-to-1 mapping  
-  email_address: 'email'   // 1-to-1 mapping
-};
+interface Article {
+  id: number;
+  title: string;
+  tags: string[];    // split from keywords field
+  content: string;
+  authorId?: number; // foreign key to User table
+}
 
-// Create migrator
-const migrator = new RestMigrator(dataSource(), UserModel, fieldMapping);
+class ArticleModel extends ListModel<Article> {
+  indexKey = 'id' as const;
+  client = new HTTPClient();
+  baseURI = '/api/articles';
 
-// Run migration
-for await (const progress of migrator.boot()) {
-  console.log(`Processed: ${progress.processed} items`);
-  if (progress.error) {
-    console.error('Migration error:', progress.error);
+  async loadPage(pageIndex: number, pageSize: number, filter: any) {
+    return {
+      pageData: [],
+      totalCount: 0,
+    };
   }
 }
 ```
 
-## Mapping Types
-
-### 1. One-to-One Simple Mapping
-
-Map source field directly to target field:
+### Migration Configuration
 
 ```typescript
+import { RestMigrator } from 'mobx-restful-migrator';
+
+// Sample source data
+async function* getArticles() {
+  const articles = [
+    {
+      id: 1,
+      title: 'Introduction to TypeScript',
+      keywords: 'typescript,javascript,programming',
+      content: 'TypeScript is a typed superset of JavaScript...',
+      author: 'John Doe',
+      email: 'john@example.com'
+    },
+    {
+      id: 2,
+      title: 'MobX State Management',
+      keywords: 'mobx,react,state-management',
+      content: 'MobX makes state management simple...',
+      author: 'Jane Smith',
+      email: 'jane@example.com'
+    }
+  ];
+  
+  for (const article of articles) {
+    yield article;
+  }
+}
+
+// Migration configuration demonstrating all 4 mapping types
+const fieldMapping = {
+  // 1. Simple 1-to-1 mappings
+  id: 'id',
+  title: 'title', 
+  content: 'content',
+  
+  // 2. One-to-Many mapping: Keywords string → tags array
+  keywords: (data: SourceArticle) => ({
+    tags: data.keywords.split(',').map(tag => tag.trim())
+  }),
+  
+  // 3. Many-to-One mapping: Compute word count from content
+  content_stats: (data: SourceArticle) => ({
+    wordCount: data.content.split(' ').length
+  }),
+  
+  // 4. Cross-table relationship: Author/Email → User table
+  author: (data: SourceArticle) => ({
+    name: data.author,
+    email: data.email,
+    model: UserModel  // Maps to User table via ListModel
+  })
+};
+
+// Run migration with user-controlled counting and error handling
+const migrator = new RestMigrator(getArticles(), ArticleModel, fieldMapping);
+
+let count = 0;
+for await (const progress of migrator.boot()) {
+  count++;
+  console.log(`Processed: ${count} articles`);
+  console.log(`Current article: ${progress.currentItem.title}`);
+  
+  // Users handle their own error management
+  try {
+    // Process the migrated data as needed
+  } catch (error) {
+    console.error(`Error processing article ${count}:`, error);
+    // Continue processing or break as needed
+  }
+}
+
+console.log(`Migration completed. Total: ${count} articles processed`);
+```
+
+## Four Mapping Types
+
+### 1. Simple 1-to-1 Mapping
+Map source field directly to target field using string mapping:
+```typescript
 const mapping = {
-  user_id: 'id',
-  full_name: 'name'
+  id: 'id',
+  title: 'title'
 };
 ```
 
-### 2. One-to-Many Mapping with Resolver
-
-Use a resolver function to map one source field to multiple target fields:
-
+### 2. One-to-Many Mapping  
+Use resolver function to map one source field to multiple target fields:
 ```typescript
 const mapping = {
-  full_name: (data) => ({
-    firstName: data.full_name.split(' ')[0],
-    lastName: data.full_name.split(' ')[1]
+  keywords: (data) => ({
+    tags: data.keywords.split(',').map(tag => tag.trim()),
+    tagCount: data.keywords.split(',').length
   })
 };
 ```
 
-### 3. Many-to-One Mapping with Resolver
-
-Use a resolver function to combine multiple source fields:
-
+### 3. Many-to-One Mapping
+Use resolver function to compute target field from source data:
 ```typescript
 const mapping = {
-  birth_year: (data) => ({
-    age: new Date().getFullYear() - data.birth_year
+  content: (data) => ({
+    wordCount: data.content.split(' ').length,
+    charCount: data.content.length
   })
 };
 ```
 
 ### 4. Cross-Table Relationships
-
-Handle relationships with other models:
-
+Use resolver function with `model` property for related tables:
 ```typescript
-class CompanyModel {
-  indexKey = 'companyId';
-  companyId?: number;
-  name?: string;
-}
-
 const mapping = {
-  company_info: (data) => ({
-    companyId: data.company_info.id,
-    model: CompanyModel  // Specify the related model
+  author: (data) => ({
+    name: data.author,
+    email: data.email,
+    model: UserModel  // References User ListModel
   })
 };
-```
-
-## Advanced Example
-
-```typescript
-import { RestMigrator } from 'mobx-restful-migrator';
-
-// Source data interface
-interface SourceUser {
-  user_id: number;
-  full_name: string;
-  email_address: string;
-  birth_year: number;
-  company_info: {
-    id: number;
-    name: string;
-  };
-}
-
-// Target models
-class UserModel {
-  indexKey = 'id';
-  id?: number;
-  name?: string;
-  email?: string;
-  age?: number;
-  companyId?: number;
-}
-
-class CompanyModel {
-  indexKey = 'companyId';
-  companyId?: number;
-  name?: string;
-}
-
-// Complex mapping with all types
-const complexMapping = {
-  // Simple 1-to-1 mappings
-  user_id: 'id',
-  email_address: 'email',
-  
-  // 1-to-many mapping
-  full_name: (data: SourceUser) => ({
-    name: data.full_name.toUpperCase()
-  }),
-  
-  // Many-to-1 computed mapping
-  birth_year: (data: SourceUser) => ({
-    age: new Date().getFullYear() - data.birth_year
-  }),
-  
-  // Cross-table relationship
-  company_info: (data: SourceUser) => ({
-    companyId: data.company_info.id,
-    model: CompanyModel
-  })
-};
-
-// Async data source
-async function* fetchUsers(): AsyncGenerator<SourceUser> {
-  const users = await fetch('/api/users').then(r => r.json());
-  for (const user of users) {
-    yield user;
-  }
-}
-
-// Run migration with progress tracking
-const migrator = new RestMigrator(fetchUsers(), UserModel, complexMapping);
-
-for await (const progress of migrator.boot()) {
-  console.log(`Progress: ${progress.processed} items processed`);
-  
-  if (progress.error) {
-    console.error(`Error processing item:`, progress.currentItem);
-    console.error(`Error details:`, progress.error.message);
-  } else {
-    console.log(`Successfully migrated:`, progress.currentItem);
-  }
-}
 ```
 
 ## API Reference
 
 ### RestMigrator\<TSource>
 
-Main migration class.
-
 #### Constructor
-
 ```typescript
 constructor(
   dataSource: AsyncIterable<TSource>,
-  targetModel: ListModelConstructor,
+  targetModel: ListModelClass,
   fieldMapping: MigrationConfig<TSource>
 )
 ```
 
-- `dataSource`: Async iterable providing source data
-- `targetModel`: Target MobX-RESTful model class
-- `fieldMapping`: Configuration object defining field mappings
-
-#### Methods
-
-##### boot(): AsyncGenerator\<MigrationProgress>
-
-Runs the migration process and yields progress information.
+#### boot(): AsyncGenerator\<MigrationProgress>
+Returns an async generator that yields progress information. Counting and error handling are left to the user for maximum flexibility.
 
 ```typescript
 interface MigrationProgress {
-  processed: number;     // Number of items processed
-  total?: number;        // Total items (if known)
-  currentItem?: any;     // Current item being processed
-  error?: Error;         // Error if migration failed for this item
+  processed: number;    // Set to 0 - users handle counting externally
+  currentItem?: any;    // Current source item being processed
 }
 ```
 
-### Types
+## User-Controlled Migration Flow
 
-#### MigrationConfig\<TSource>
-
-Configuration object defining how to map fields:
+The migrator yields control back to you for each item, allowing flexible error handling and progress tracking:
 
 ```typescript
-interface MigrationConfig<TSource> {
-  [sourceField: string]: FieldMapping<TSource>;
-}
-```
+let successCount = 0;
+let errorCount = 0;
 
-#### FieldMapping\<TSource>
-
-Union type for different mapping strategies:
-
-```typescript
-type FieldMapping<TSource> = 
-  | string                                           // Simple 1-to-1 mapping
-  | ResolverFunction<TSource, Record<string, any>>   // Resolver function
-  | CrossTableResolver<TSource>;                     // Cross-table relationship
-```
-
-## Error Handling
-
-The migrator provides comprehensive error handling:
-
-```typescript
 for await (const progress of migrator.boot()) {
-  if (progress.error) {
-    // Handle individual item errors
-    console.error(`Failed to migrate item:`, progress.currentItem);
-    console.error(`Error:`, progress.error.message);
-    
-    // Continue processing other items
-    continue;
+  try {
+    // Your custom processing logic here
+    console.log(`Processing: ${progress.currentItem.title}`);
+    successCount++;
+  } catch (error) {
+    console.error('Migration error:', error);
+    errorCount++;
+    // Decide whether to continue or break
   }
-  
-  // Process successful migration
-  console.log(`Successfully processed item ${progress.processed}`);
 }
+
+console.log(`Results: ${successCount} success, ${errorCount} errors`);
 ```
 
 ## License

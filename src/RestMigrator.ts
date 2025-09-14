@@ -3,7 +3,6 @@ import {
   ListModelClass,
   MigrationConfig,
   MigrationProgress,
-  CrossTableResolver,
   TargetPatch
 } from './types';
 
