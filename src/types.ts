@@ -11,11 +11,11 @@ export type TargetPatch<T extends object> = {
   };
 };
 
-export type FieldMapping<Source extends object = {}, Target extends object = {}> =
+export type FieldMapping<Source extends object = object, Target extends object = object> =
   | keyof Target
   | TargetPatch<Target>
   | ((rawRow: Source) => TargetPatch<Target> | Promise<TargetPatch<Target>>);
 
-export type MigrationConfig<Source extends object = {}, Target extends object = {}> = {
+export type MigrationConfig<Source extends object = object, Target extends object = object> = {
   [sourceField in keyof Source]?: FieldMapping<Source, Target>;
 };

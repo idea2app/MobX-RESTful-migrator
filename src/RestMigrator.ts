@@ -17,7 +17,11 @@ export class RestMigrator<Source extends object, Target extends DataObject> {
     const targetStore = new this.targetModel();
 
     for await (const sourceItem of this.dataSource()) {
-      const mappedData = Object.fromEntries(await Array.fromAsync(this.mapFields(sourceItem)));
+      const mappedEntries = [];
+      for await (const entry of this.mapFields(sourceItem)) {
+        mappedEntries.push(entry);
+      }
+      const mappedData = Object.fromEntries(mappedEntries);
 
       yield targetStore.updateOne(mappedData as Target);
     }
