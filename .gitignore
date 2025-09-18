@@ -84,6 +84,7 @@ dist
 
 # NPM lock file
 package-lock.json
+yarn.lock
 
 # Gatsby files
 .cache/

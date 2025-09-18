@@ -1,129 +1,70 @@
-import { ListModel } from 'mobx-restful';
-import {
-  ListModelClass,
-  MigrationConfig,
-  MigrationProgress,
-  TargetPatch
-} from './types';
+import { DataObject, Filter, ListModel } from 'mobx-restful';
+import { Constructor } from 'web-utility';
 
-export class RestMigrator<TSource = any> {
-  private dataSource: AsyncIterable<TSource>;
-  private targetModel: ListModelClass;
-  private fieldMapping: MigrationConfig<TSource>;
+import { MigrationConfig, TargetPatch } from './types';
 
+export class RestMigrator<Source extends object, Target extends DataObject> {
   constructor(
-    dataSource: AsyncIterable<TSource>,
-    targetModel: ListModelClass,
-    fieldMapping: MigrationConfig<TSource>
-  ) {
-    this.dataSource = dataSource;
-    this.targetModel = targetModel;
-    this.fieldMapping = fieldMapping;
-  }
+    private dataSource: () => AsyncGenerator<Source>,
+    private targetModel: Constructor<ListModel<Target>>,
+    private fieldMapping: MigrationConfig<Source, Target>
+  ) {}
 
   /**
    * Main migration method that yields progress information
    */
-  async *boot(): AsyncGenerator<MigrationProgress, void, unknown> {
-    for await (const sourceItem of this.dataSource) {
-      const mappedData = await this.mapFields(sourceItem);
-      
-      // Create and save the target model instance
-      const targetInstance = new this.targetModel();
-      Object.assign(targetInstance, mappedData);
-      
-      yield {
-        processed: 0, // Let users handle counting externally
-        currentItem: sourceItem,
-      };
+  async *boot() {
+    const targetStore = new this.targetModel();
+
+    for await (const sourceItem of this.dataSource()) {
+      const mappedData = Object.fromEntries(await Array.fromAsync(this.mapFields(sourceItem)));
+
+      yield targetStore.updateOne(mappedData as Target);
     }
   }
 
   /**
    * Maps source data fields to target model fields according to the configuration
    */
-  private async mapFields(sourceData: TSource): Promise<Record<string, any>> {
-    const mappedData: Record<string, any> = {};
+  private async *mapFields(sourceData: Source) {
+    for (const sourceField in this.fieldMapping) {
+      const mapping = this.fieldMapping[sourceField],
+        value = sourceData[sourceField];
 
-    for (const [sourceField, mapping] of Object.entries(this.fieldMapping)) {
-      const mappedValue = await this.applyMapping(sourceData, sourceField, mapping);
-      
-      if (mappedValue !== undefined && mappedValue !== null) {
-        // Handle different mapping result types
-        if (typeof mappedValue === 'object' && !Array.isArray(mappedValue)) {
-          // For resolver functions that return objects, merge the results
-          Object.assign(mappedData, mappedValue);
-        } else {
-          // For simple mappings, use the target field name
-          const targetField = typeof mapping === 'string' ? mapping : sourceField;
-          mappedData[targetField] = mappedValue;
-        }
+      const resolvedMapping =
+        typeof mapping === 'function'
+          ? await mapping(sourceData)
+          : typeof mapping === 'string'
+          ? { [mapping]: { value } }
+          : mapping!;
+
+      yield* this.applyObjectMapping(value, resolvedMapping as TargetPatch<Target>);
+    }
+  }
+
+  private async *applyObjectMapping(
+    sourceValue: Source[keyof Source],
+    mapping: TargetPatch<Target>
+  ) {
+    const targetStore = new this.targetModel();
+
+    for (const key in mapping) {
+      let { value, unique, model } = mapping[key]!;
+
+      value ??= sourceValue as unknown as Target[keyof Target];
+
+      if (!(value != null)) continue;
+
+      if (unique) {
+        const [existed] = await targetStore.getList({ [key]: value } as Filter<Target>, 1, 1);
+
+        if (existed) throw new RangeError(`Duplicate value for unique field '${key}': ${value}`);
+      } else if (model) {
+        const relatedStore = new model();
+
+        ({ [relatedStore.indexKey]: value } = await relatedStore.updateOne(value));
       }
+      yield [key, value!] as const;
     }
-
-    return mappedData;
-  }
-
-  /**
-   * Applies individual field mapping based on mapping type
-   */
-  private async applyMapping(
-    sourceData: TSource,
-    sourceField: string,
-    mapping: any
-  ): Promise<any> {
-    // Type 1: Simple 1-to-1 mapping (string)
-    if (typeof mapping === 'string') {
-      return (sourceData as any)[sourceField];
-    }
-
-    // Type 2, 3, 4: Function-based mappings
-    if (typeof mapping === 'function') {
-      const result = mapping(sourceData);
-      
-      // Handle async resolver functions
-      const resolvedResult = await Promise.resolve(result);
-      
-      // Type 4: Cross-table relation - check if result has model property
-      if (this.isCrossTableMapping(resolvedResult)) {
-        return await this.handleCrossTableMapping(resolvedResult);
-      }
-      
-      // Type 2 & 3: Simple resolver functions
-      return resolvedResult;
-    }
-
-    throw new Error(`Unsupported mapping type for field '${sourceField}'`);
-  }
-
-  /**
-   * Checks if the mapping result is a cross-table mapping
-   */
-  private isCrossTableMapping(result: any): result is TargetPatch {
-    return result && typeof result === 'object' && 'model' in result;
-  }
-
-  /**
-   * Handles cross-table relationship mapping
-   */
-  private async handleCrossTableMapping(mapping: TargetPatch): Promise<any> {
-    const { model: RelatedModel, ...fieldData } = mapping;
-    
-    if (!RelatedModel) {
-      return fieldData;
-    }
-
-    // Create related model instance to get indexKey
-    const relatedInstance = new RelatedModel();
-    const indexKey = (relatedInstance as ListModel<any, any>).indexKey;
-    
-    if (!indexKey) {
-      throw new Error('Related model must have an indexKey property');
-    }
-
-    // Return the foreign key value for the relationship
-    // In a real implementation, you might want to look up or create the related record
-    const indexKeyStr = String(indexKey);
-    return fieldData[indexKeyStr];
   }
 }
