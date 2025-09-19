@@ -106,19 +106,33 @@ class ArticleModel extends TableModel<Article> {
 
 ### Migration Configuration
 
+First, prepare your CSV data file:
+
+```csv
+// articles.csv
+title,subtitle,keywords,content,author,email
+Introduction to TypeScript,A Comprehensive Guide,"typescript,javascript,programming","TypeScript is a typed superset of JavaScript...",John Doe,john@example.com
+MobX State Management,Made Simple,"mobx,react,state-management","MobX makes state management simple...",Jane Smith,jane@example.com
+```
+
+Then implement the migration:
+
 ```typescript
 import { RestMigrator } from 'mobx-restful-migrator';
-import { parseCSV } from 'web-utility';
+import { readText } from 'web-utility';
 
-// Sample CSV data
-const csvData = `title,subtitle,keywords,content,author,email
-Introduction to TypeScript,A Comprehensive Guide,"typescript,javascript,programming","TypeScript is a typed superset of JavaScript...",John Doe,john@example.com
-MobX State Management,Made Simple,"mobx,react,state-management","MobX makes state management simple...",Jane Smith,jane@example.com`;
-
-// Parse CSV data into source articles
+// Load and parse CSV data into source articles
 async function* getArticles() {
-  const articles = parseCSV(csvData, { head: true });
-  for (const article of articles) {
+  const csvText = await readText('./articles.csv');
+  const rows = csvText.trim().split('\n');
+  const headers = rows[0].split(',');
+  
+  for (let i = 1; i < rows.length; i++) {
+    const values = rows[i].split(',');
+    const article = {};
+    headers.forEach((header, index) => {
+      article[header] = values[index]?.replace(/"/g, '') || '';
+    });
     yield article;
   }
 }
@@ -173,7 +187,9 @@ console.log(`Migration completed. Total: ${count} articles processed`);
 ## Four Mapping Types
 
 ### 1. Simple 1-to-1 Mapping
+
 Map source field directly to target field using string mapping:
+
 ```typescript
 const mapping = {
   title: 'title',
@@ -181,8 +197,10 @@ const mapping = {
 };
 ```
 
-### 2. Many-to-One Mapping  
+### 2. Many-to-One Mapping
+
 Use resolver function to combine multiple source fields into one target field:
+
 ```typescript
 const mapping = {
   title: ({ title, subtitle }) => ({
@@ -192,7 +210,9 @@ const mapping = {
 ```
 
 ### 3. One-to-Many Mapping
+
 Use resolver function to map one source field to multiple target fields with `value` property:
+
 ```typescript
 const mapping = {
   keywords: ({ keywords }) => {
@@ -204,7 +224,9 @@ const mapping = {
 ```
 
 ### 4. Cross-Table Relationships
+
 Use resolver function with `model` property for related tables:
+
 ```typescript
 const mapping = {
   author: ({ author, email }) => ({
