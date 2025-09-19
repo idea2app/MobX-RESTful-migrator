@@ -1,3 +1,4 @@
+import 'core-js/es/array/from-async';
 import { DataObject, Filter, ListModel } from 'mobx-restful';
 import { Constructor } from 'web-utility';
 
@@ -17,11 +18,7 @@ export class RestMigrator<Source extends object, Target extends DataObject> {
     const targetStore = new this.targetModel();
 
     for await (const sourceItem of this.dataSource()) {
-      const mappedEntries = [];
-      for await (const entry of this.mapFields(sourceItem)) {
-        mappedEntries.push(entry);
-      }
-      const mappedData = Object.fromEntries(mappedEntries);
+      const mappedData = Object.fromEntries(await Array.fromAsync(this.mapFields(sourceItem)));
 
       yield targetStore.updateOne(mappedData as Target);
     }

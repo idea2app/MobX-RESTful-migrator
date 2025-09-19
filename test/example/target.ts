@@ -9,6 +9,7 @@ export interface User {
 export interface Article {
   id: number;
   title: string;
+  category: string;
   tags: string[];
   content: string;
   author: User;
