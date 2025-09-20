@@ -18,7 +18,7 @@ export async function* readCSV<T extends object>(path: string) {
   try {
     fileHandle = await open(path);
 
-    yield* readTextTable<T>(fileHandle.createReadStream()) as AsyncGenerator<T>;
+    yield* readTextTable<T>(fileHandle.createReadStream({ encoding: 'utf-8' })) as AsyncGenerator<T>;
   } finally {
     await fileHandle?.close();
   }
