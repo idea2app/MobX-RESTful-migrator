@@ -120,39 +120,19 @@ Then implement the migration:
 
 ```typescript
 import { RestMigrator, MigrationSchema, ConsoleLogger } from 'mobx-restful-migrator';
-import { readFile } from 'fs/promises';
+import { FileHandle, open } from 'fs/promises';
+import { readTextTable } from 'web-utility';
 
-// Load and parse CSV data into source articles
+// Load and parse CSV data using async streaming for large files
 async function* getArticles() {
-  const csvContent = await readFile('./articles.csv', 'utf-8');
-  const lines = csvContent.trim().split('\n');
-  const headers = lines[0].split(',');
-  
-  for (let i = 1; i < lines.length; i++) {
-    const values: string[] = [];
-    const line = lines[i];
-    let current = '';
-    let inQuotes = false;
-    
-    // Simple CSV parsing with quote handling
-    for (let j = 0; j < line.length; j++) {
-      const char = line[j];
-      if (char === '"') {
-        inQuotes = !inQuotes;
-      } else if (char === ',' && !inQuotes) {
-        values.push(current.trim());
-        current = '';
-      } else {
-        current += char;
-      }
-    }
-    values.push(current.trim());
-    
-    const article = {} as SourceArticle;
-    headers.forEach((header, index) => {
-      (article as any)[header] = values[index] || '';
-    });
-    yield article;
+  let fileHandle: FileHandle | undefined;
+
+  try {
+    fileHandle = await open('./articles.csv');
+
+    yield* readTextTable<SourceArticle>(fileHandle.createReadStream()) as AsyncGenerator<SourceArticle>;
+  } finally {
+    await fileHandle?.close();
   }
 }
 
@@ -302,18 +282,41 @@ Implement your own event bus for custom logging and monitoring:
 
 ```typescript
 import { MigrationEventBus, MigrationProgress } from 'mobx-restful-migrator';
+import { writeFile } from 'fs/promises';
 
 class DatabaseLogger implements MigrationEventBus<SourceArticle, Article> {
   async save({ index, sourceItem, targetItem }: MigrationProgress<SourceArticle, Article>) {
-    // Log to database, send notifications, etc.
+    // Log to database, send notifications, etc. using async file operations
+    const logEntry = JSON.stringify({ 
+      type: 'success', 
+      index, 
+      sourceId: sourceItem?.id, 
+      targetId: targetItem?.id,
+      timestamp: new Date().toISOString()
+    });
+    await writeFile(`./logs/migration-${Date.now()}.json`, logEntry);
     await logToDatabase('success', { index, sourceId: sourceItem?.id, targetId: targetItem?.id });
   }
   
   async skip({ index, error }: MigrationProgress<SourceArticle, Article>) {
+    const logEntry = JSON.stringify({ 
+      type: 'skip', 
+      index, 
+      reason: error?.message,
+      timestamp: new Date().toISOString()
+    });
+    await writeFile(`./logs/skip-${Date.now()}.json`, logEntry);
     await logToDatabase('skip', { index, reason: error?.message });
   }
   
   async error({ index, error }: MigrationProgress<SourceArticle, Article>) {
+    const logEntry = JSON.stringify({ 
+      type: 'error', 
+      index, 
+      error: error?.message,
+      timestamp: new Date().toISOString()
+    });
+    await writeFile(`./logs/error-${Date.now()}.json`, logEntry);
     await logToDatabase('error', { index, error: error?.message });
     await sendErrorAlert(error);
   }
