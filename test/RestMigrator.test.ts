@@ -6,8 +6,12 @@ import { MigrationSchema } from '../src/types';
 import { createSourceStream, SourceArticle } from './example/source';
 import { ArticleModel, UserModel, Article } from './example/target';
 
-describe('RestMigrator', async () => {
-  const sampleArticles = await Array.fromAsync(createSourceStream());
+describe('RestMigrator', () => {
+  let sampleArticles: SourceArticle[];
+
+  beforeAll(async () => {
+    sampleArticles = await Array.fromAsync(createSourceStream());
+  });
 
   describe('Simple 1-to-1 mapping', () => {
     it('should map fields with simple string mappings', async () => {

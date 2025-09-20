@@ -1,8 +1,8 @@
 import { DataObject, Filter, ListModel } from 'mobx-restful';
 import { Constructor } from 'web-utility';
 
-import { MigrationEventBus, MigrationSchema, ProgressTarget, TargetPatch } from './types';
 import { ConsoleLogger } from './ConsoleLog';
+import { MigrationEventBus, MigrationSchema, ProgressTarget, TargetPatch } from './types';
 
 export class RestMigrator<Source extends object, Target extends DataObject> {
   constructor(
@@ -31,14 +31,14 @@ export class RestMigrator<Source extends object, Target extends DataObject> {
         yield targetItem;
 
         await this.eventBus.save({ index, sourceItem, mappedData, targetItem });
-      } catch (error: any) {
+      } catch (error: unknown) {
         const isSkip = error instanceof RangeError;
 
         await (isSkip ? this.eventBus.skip : this.eventBus.error)({
           index,
           sourceItem,
           mappedData,
-          error,
+          error: error as Error,
         });
       }
     }
@@ -75,13 +75,14 @@ export class RestMigrator<Source extends object, Target extends DataObject> {
     onRelationSave: (
       mappedData: Partial<ProgressTarget<Target>>,
       targetItem: ProgressTarget<Target>
-    ) => any,
-    onRelationError: (mappedData: Partial<ProgressTarget<Target>>, error: Error) => any
+    ) => void,
+    onRelationError: (mappedData: Partial<ProgressTarget<Target>>, error: Error) => void
   ) {
     const targetStore = new this.targetModel();
 
     for (const key in mapping) {
-      let { value, unique, model } = mapping[key]!;
+      const { value: initialValue, unique, model } = mapping[key]!;
+      let value = initialValue;
 
       value ??= sourceValue as unknown as Target[keyof Target];
 

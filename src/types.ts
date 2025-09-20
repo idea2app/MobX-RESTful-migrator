@@ -32,5 +32,5 @@ export interface MigrationProgress<Source extends object, Target extends object>
 
 export type MigrationEventBus<Source extends object, Target extends object> = Record<
   'save' | 'skip' | 'error',
-  (progress: MigrationProgress<Source, Target>) => Promise<any>
+  (progress: MigrationProgress<Source, Target>) => Promise<void>
 >;

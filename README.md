@@ -10,9 +10,10 @@ MobX-RESTful-migrator is a TypeScript library that provides a flexible data migr
 
 - **Flexible Field Mappings**: Support for four different mapping types
 - **Async Generator Pattern**: Control migration flow at your own pace
-- **Cross-table Relationships**: Handle complex data relationships
-- **User-Controlled Error Handling**: You manage counting and error handling externally
+- **Cross-table Relationships**: Handle complex data relationships  
+- **Event-Driven Architecture**: Built-in console logging with customizable event bus
 - **TypeScript Support**: Full TypeScript support with type safety
+- **CSV Data Processing**: Built-in CSV file reading and parsing capabilities
 
 ## Installation
 
@@ -118,27 +119,45 @@ MobX State Management,Made Simple,"mobx,react,state-management","MobX makes stat
 Then implement the migration:
 
 ```typescript
-import { RestMigrator } from 'mobx-restful-migrator';
-import { readText } from 'web-utility';
+import { RestMigrator, MigrationSchema, ConsoleLogger } from 'mobx-restful-migrator';
+import { readFile } from 'fs/promises';
 
 // Load and parse CSV data into source articles
 async function* getArticles() {
-  const csvText = await readText('./articles.csv');
-  const rows = csvText.trim().split('\n');
-  const headers = rows[0].split(',');
-
-  for (let i = 1; i < rows.length; i++) {
-    const values = rows[i].split(',');
-    const article = {};
+  const csvContent = await readFile('./articles.csv', 'utf-8');
+  const lines = csvContent.trim().split('\n');
+  const headers = lines[0].split(',');
+  
+  for (let i = 1; i < lines.length; i++) {
+    const values: string[] = [];
+    const line = lines[i];
+    let current = '';
+    let inQuotes = false;
+    
+    // Simple CSV parsing with quote handling
+    for (let j = 0; j < line.length; j++) {
+      const char = line[j];
+      if (char === '"') {
+        inQuotes = !inQuotes;
+      } else if (char === ',' && !inQuotes) {
+        values.push(current.trim());
+        current = '';
+      } else {
+        current += char;
+      }
+    }
+    values.push(current.trim());
+    
+    const article = {} as SourceArticle;
     headers.forEach((header, index) => {
-      article[header] = values[index]?.replace(/"/g, '') || '';
+      (article as any)[header] = values[index] || '';
     });
     yield article;
   }
 }
 
 // Complete migration configuration demonstrating all 4 mapping types
-const mapping: MigrationConfig<SourceArticle, Article> = {
+const mapping: MigrationSchema<SourceArticle, Article> = {
   // 1. Many-to-One mapping: Title + Subtitle → combined title
   title: ({ title, subtitle }) => ({
     title: { value: `${title}: ${subtitle}` },
@@ -162,26 +181,40 @@ const mapping: MigrationConfig<SourceArticle, Article> = {
   }),
 };
 
-// Run migration with user-controlled counting and error handling
+// Run migration with built-in console logging (default)
 const migrator = new RestMigrator(getArticles, ArticleModel, mapping);
 
-let count = 0;
-for await (const result of migrator.boot()) {
-  count++;
-  console.log(`Processed: ${count} articles`);
-  console.log(`Migrated article: ${result.title}`);
+// The ConsoleLogger automatically logs each step:
+// - saved No.X: successful migrations with source, mapped, and target data
+// - skipped No.X: skipped items (duplicate unique fields)  
+// - error at No.X: migration errors with details
 
-  // Users handle their own error management
-  try {
-    // Process the migrated data as needed
-    console.log(`Article successfully migrated with ${result.tags.length} tags`);
-  } catch (error) {
-    console.error(`Error processing article ${count}:`, error);
-    // Continue processing or break as needed
+for await (const result of migrator.boot()) {
+  // Process the migrated target objects
+  console.log(`Successfully migrated article: ${result.title}`);
+}
+
+// Optional: Use custom event bus
+class CustomEventBus implements MigrationEventBus<SourceArticle, Article> {
+  async save({ index, targetItem }) {
+    console.log(`✅ Migrated article ${index}: ${targetItem?.title}`);
+  }
+  
+  async skip({ index, error }) {
+    console.log(`⚠️  Skipped article ${index}: ${error?.message}`);
+  }
+  
+  async error({ index, error }) {
+    console.log(`❌ Error at article ${index}: ${error?.message}`);
   }
 }
 
-console.log(`Migration completed. Total: ${count} articles processed`);
+const migratorWithCustomLogger = new RestMigrator(
+  getArticles, 
+  ArticleModel, 
+  mapping,
+  new CustomEventBus()
+);
 ```
 
 ## Four Mapping Types
@@ -191,7 +224,7 @@ console.log(`Migration completed. Total: ${count} articles processed`);
 Map source field directly to target field using string mapping:
 
 ```typescript
-const mapping = {
+const mapping: MigrationSchema<SourceArticle, Article> = {
   title: 'title',
   content: 'content',
 };
@@ -202,7 +235,7 @@ const mapping = {
 Use resolver function to combine multiple source fields into one target field:
 
 ```typescript
-const mapping = {
+const mapping: MigrationSchema<SourceArticle, Article> = {
   title: ({ title, subtitle }) => ({
     title: { value: `${title}: ${subtitle}` },
   }),
@@ -214,7 +247,7 @@ const mapping = {
 Use resolver function to map one source field to multiple target fields with `value` property:
 
 ```typescript
-const mapping = {
+const mapping: MigrationSchema<SourceArticle, Article> = {
   keywords: ({ keywords }) => {
     const [category, ...tags] = keywords.split(',').map(tag => tag.trim());
 
@@ -228,7 +261,7 @@ const mapping = {
 Use resolver function with `model` property for related tables:
 
 ```typescript
-const mapping = {
+const mapping: MigrationSchema<SourceArticle, Article> = {
   author: ({ author, email }) => ({
     author: {
       value: { name: author, email },
@@ -238,25 +271,53 @@ const mapping = {
 };
 ```
 
-## User-Controlled Migration Flow
+## Event-Driven Migration Architecture
 
-The migrator yields control back to you for each item, allowing flexible error handling and progress tracking:
+The migrator includes a built-in event system for monitoring and controlling the migration process:
+
+### Built-in Console Logging
+
+By default, RestMigrator uses the `ConsoleLogger` which provides detailed console output:
 
 ```typescript
-let successCount = 0;
-let errorCount = 0;
+import { RestMigrator, ConsoleLogger } from 'mobx-restful-migrator';
+
+// ConsoleLogger is used by default
+const migrator = new RestMigrator(getArticles, ArticleModel, mapping);
 
 for await (const result of migrator.boot()) {
-  try {
-    // Your custom processing logic here
-    console.log(`Processing: ${result.title}`);
-    successCount++;
-  } catch (error) {
-    console.error('Migration error:', error);
-    errorCount++;
-    // Decide whether to continue or break
+  // Console automatically shows:
+  // - saved No.X with source, mapped, and target data tables
+  // - skipped No.X for duplicate unique fields  
+  // - error at No.X for migration errors
+  
+  // Your processing logic here
+  console.log(`✅ Article migrated: ${result.title}`);
+}
+```
+
+### Custom Event Handling
+
+Implement your own event bus for custom logging and monitoring:
+
+```typescript
+import { MigrationEventBus, MigrationProgress } from 'mobx-restful-migrator';
+
+class DatabaseLogger implements MigrationEventBus<SourceArticle, Article> {
+  async save({ index, sourceItem, targetItem }: MigrationProgress<SourceArticle, Article>) {
+    // Log to database, send notifications, etc.
+    await logToDatabase('success', { index, sourceId: sourceItem?.id, targetId: targetItem?.id });
+  }
+  
+  async skip({ index, error }: MigrationProgress<SourceArticle, Article>) {
+    await logToDatabase('skip', { index, reason: error?.message });
+  }
+  
+  async error({ index, error }: MigrationProgress<SourceArticle, Article>) {
+    await logToDatabase('error', { index, error: error?.message });
+    await sendErrorAlert(error);
   }
 }
 
-console.log(`Migration completed: ${successCount} successful, ${errorCount} errors`);
+const migrator = new RestMigrator(getArticles, ArticleModel, mapping, new DatabaseLogger());
 ```
