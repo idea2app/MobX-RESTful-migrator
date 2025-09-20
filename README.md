@@ -1,10 +1,10 @@
 # MobX-RESTful-migrator
 
-Data Migration framework based on MobX-RESTful
+Data Migration framework based on [MobX-RESTful][1]
 
 ## Overview
 
-MobX-RESTful-migrator is a TypeScript library that provides a flexible data migration framework built on top of MobX-RESTful's ListModel abstraction. It allows you to migrate data from various sources to MobX-RESTful models with customizable field mappings and relationships.
+MobX-RESTful-migrator is a TypeScript library that provides a flexible data migration framework built on top of MobX-RESTful's ListModel abstraction. It allows you to migrate data from various sources through MobX-RESTful models with customizable field mappings and relationships.
 
 ## Features
 
@@ -13,7 +13,6 @@ MobX-RESTful-migrator is a TypeScript library that provides a flexible data migr
 - **Cross-table Relationships**: Handle complex data relationships
 - **Event-Driven Architecture**: Built-in console logging with customizable event bus
 - **TypeScript Support**: Full TypeScript support with type safety
-- **CSV Data Processing**: Built-in CSV file reading and parsing capabilities
 
 ## Installation
 
@@ -21,12 +20,12 @@ MobX-RESTful-migrator is a TypeScript library that provides a flexible data migr
 npm install mobx-restful mobx-restful-migrator
 ```
 
-## Usage Example: Article Migration
+## Usage Example: Article migration
 
-The typical use case is migrating article data with the following schema:
+The typical use case is migrating Article data with the following schema:
 
 - **Source**: Article table with Title, Keywords, Content, Author, Email fields
-- **Target**: Keywords field splits into tags array, Author/Email fields map to User table
+- **Target**: Keywords field splits into Category string & Tags array, Author & Email fields map to User table
 
 ### Source Data Schema
 
@@ -35,10 +34,10 @@ interface SourceArticle {
   id: number;
   title: string;
   subtitle: string;
-  keywords: string; // comma-separated keywords to split into tags
+  keywords: string; // comma-separated keywords to split into category & tags
   content: string;
-  author: string; // maps to User table name field
-  email: string; // maps to User table email field
+  author: string; // maps to User table "name" field
+  email: string; // maps to User table "email" field
 }
 ```
 
@@ -98,7 +97,7 @@ export class ArticleModel extends TableModel<Article> {
 
 ### Migration Configuration
 
-First, prepare your CSV data file `articles.csv`:
+First, export your CSV data file `articles.csv` from an Excel file or Old database:
 
 ```csv
 title,subtitle,keywords,content,author,email
@@ -109,6 +108,8 @@ MobX State Management,Made Simple,"mobx,react,state-management","MobX makes stat
 Then implement the migration:
 
 ```typescript
+#! /usr/bin/env tsx
+
 import { RestMigrator, MigrationSchema, ConsoleLogger } from 'mobx-restful-migrator';
 import { FileHandle, open } from 'fs/promises';
 import { readTextTable } from 'web-utility';
@@ -134,11 +135,11 @@ const loadSourceArticles = () => readCSV<SourceArticle>('article.csv');
 
 // Complete migration configuration demonstrating all 4 mapping types
 const mapping: MigrationSchema<SourceArticle, Article> = {
+
   // 1. Many-to-One mapping: Title + Subtitle → combined title
   title: ({ title, subtitle }) => ({
     title: { value: `${title}: ${subtitle}` },
   }),
-
   content: 'content',
 
   // 2. One-to-Many mapping: Keywords string → category string & tags array
@@ -147,8 +148,7 @@ const mapping: MigrationSchema<SourceArticle, Article> = {
 
     return { category: { value: category }, tags: { value: tags } };
   },
-
-  // 3. Cross-table relationship: Author/Email → User table
+  // 3. Cross-table relationship: Author & Email → User table
   author: ({ author, email }) => ({
     author: {
       value: { name: author, email },
@@ -171,20 +171,26 @@ for await (const { title } of migrator.boot()) {
 }
 ```
 
-#### Optional: Use custom event bus
+In the end, run your script with a TypeScript runtime:
+
+```bash
+tsx your-migration.ts 1> saved.log 2> error.log
+```
+
+### Optional: Use custom event bus
 
 ```typescript
 class CustomEventBus implements MigrationEventBus<SourceArticle, Article> {
   async save({ index, targetItem }) {
-    console.log(`✅ Migrated article ${index}: ${targetItem?.title}`);
+    console.info(`✅ Migrated article ${index}: ${targetItem?.title}`);
   }
 
   async skip({ index, error }) {
-    console.log(`⚠️  Skipped article ${index}: ${error?.message}`);
+    console.warn(`⚠️  Skipped article ${index}: ${error?.message}`);
   }
 
   async error({ index, error }) {
-    console.log(`❌ Error at article ${index}: ${error?.message}`);
+    console.error(`❌ Error at article ${index}: ${error?.message}`);
   }
 }
 
@@ -252,7 +258,7 @@ const mapping: MigrationSchema<SourceArticle, Article> = {
 
 ## Event-Driven Migration Architecture
 
-The migrator includes a built-in event system for monitoring and controlling the migration process:
+The migrator includes a built-in Event Bus for monitoring and controlling the migration process:
 
 ### Built-in Console Logging
 
@@ -279,7 +285,7 @@ for await (const { title } of migrator.boot()) {
 
 ### Custom Event Handling
 
-Implement your own event bus for custom logging and monitoring:
+Implement your own Event Bus for custom logging and monitoring:
 
 ```typescript
 import { MigrationEventBus, MigrationProgress } from 'mobx-restful-migrator';
@@ -291,7 +297,7 @@ class FileLogger implements MigrationEventBus<SourceArticle, Article> {
   bootedAt = new Date().toJSON();
 
   async save({ index, sourceItem, targetItem }: MigrationProgress<SourceArticle, Article>) {
-    // Log to file, send notifications, etc. using async file operations
+    // Log to file, send notifications, etc.
     await outputJSON(`logs/save-${this.bootedAt}.json`, {
       type: 'success',
       index,
@@ -324,3 +330,5 @@ class FileLogger implements MigrationEventBus<SourceArticle, Article> {
 
 const migrator = new RestMigrator(loadSourceArticles, ArticleModel, mapping, new FileLogger());
 ```
+
+[1]: https://github.com/idea2app/MobX-RESTful
