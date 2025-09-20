@@ -82,6 +82,10 @@ out
 .nuxt
 dist
 
+# NPM lock file
+package-lock.json
+yarn.lock
+
 # Gatsby files
 .cache/
 # Comment in the public line in if your project uses Gatsby and not Next.js

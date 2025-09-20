@@ -1,0 +1,3 @@
+title,subtitle,keywords,content,author,email
+Introduction to TypeScript,A Comprehensive Guide,"typescript,javascript,programming","TypeScript is a typed superset of JavaScript...",John Doe,john@example.com
+MobX State Management,Made Simple,"mobx,react,state-management","MobX makes state management simple...",Jane Smith,jane@example.com
