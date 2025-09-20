@@ -1,7 +1,7 @@
 {
   "name": "mobx-restful-migrator",
   "version": "0.1.0",
-  "license": "LGPL-3.0-or-later",
+  "license": "LGPL-2.1-or-later",
   "author": "shiy2008@gmail.com",
   "description": "Data Migration framework based on MobX-RESTful",
   "keywords": [
@@ -12,14 +12,19 @@
     "crawler",
     "typescript"
   ],
+  "homepage": "https://idea2app.github.io/MobX-RESTful-migrator/",
   "repository": {
     "type": "git",
-    "url": "https://github.com/idea2app/MobX-RESTful-migrator.git"
+    "url": "git+https://github.com/idea2app/MobX-RESTful-migrator.git"
+  },
+  "bugs": {
+    "url": "https://github.com/idea2app/MobX-RESTful-migrator/issues"
   },
   "source": "src/index.ts",
   "types": "dist/index.d.ts",
   "main": "dist/index.js",
   "dependencies": {
+    "mobx": "^6.13.7",
     "mobx-restful": "^2.1.2"
   },
   "peerDependencies": {
@@ -34,10 +39,15 @@
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-simple-import-sort": "^12.1.1",
     "globals": "^16.4.0",
+    "husky": "^9.1.7",
     "jest": "^29.7.0",
     "jiti": "^2.5.1",
     "koajax": "^3.1.2",
+    "lint-staged": "^16.1.6",
+    "prettier": "^3.6.2",
     "ts-jest": "^29.4.4",
+    "typedoc": "^0.28.13",
+    "typedoc-plugin-mdn-links": "^5.0.9",
     "typescript": "^5.9.2",
     "typescript-eslint": "^8.44.0",
     "web-utility": "^4.6.1"
@@ -52,6 +62,10 @@
     "arrowParens": "avoid",
     "printWidth": 100
   },
+  "lint-staged": {
+    "*.{md,ts,json,yml}": "prettier --write",
+    "*.ts": "eslint --fix"
+  },
   "jest": {
     "preset": "ts-jest",
     "collectCoverageFrom": [
@@ -59,9 +73,12 @@
     ]
   },
   "scripts": {
-    "test": "eslint src --ext .ts --fix  &&  jest",
+    "prepare": "husky",
+    "test": "lint-staged && jest",
     "dev": "tsc --watch",
-    "build": "rm -rf dist/  &&  tsc",
+    "pack-dist": "rm -rf dist/  &&  tsc",
+    "pack-docs": "rm -rf docs/  &&  typedoc src/",
+    "build": "npm run pack-dist  &&  npm run pack-docs",
     "prepublishOnly": "npm test  &&  npm run build"
   }
 }

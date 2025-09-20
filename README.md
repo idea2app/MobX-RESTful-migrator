@@ -1,6 +1,11 @@
-# MobX-RESTful-migrator
+# MobX RESTful migrator
 
 Data Migration framework based on [MobX-RESTful][1]
+
+[![NPM Dependency](https://img.shields.io/librariesio/github/idea2app/MobX-RESTful-migrator.svg)][2]
+[![CI & CD](https://github.com/idea2app/MobX-RESTful-migrator/actions/workflows/main.yml/badge.svg)][3]
+
+[![NPM](https://nodei.co/npm/mobx-restful-migrator.png?downloads=true&downloadRank=true&stars=true)][4]
 
 ## Overview
 
@@ -50,7 +55,7 @@ import { buildURLData } from 'web-utility';
 
 export abstract class TableModel<
   D extends DataObject,
-  F extends Filter<D> = Filter<D>
+  F extends Filter<D> = Filter<D>,
 > extends ListModel<D, F> {
   client = new HTTPClient({ baseURI: 'http://localhost:8080', responseType: 'json' });
 
@@ -65,7 +70,7 @@ export abstract class TableModel<
 
   async loadPage(pageIndex: number, pageSize: number, filter: F) {
     const { body } = await this.client.get<{ list: D[]; count: number }>(
-      `${this.baseURI}?${buildURLData({ ...filter, pageIndex, pageSize })}`
+      `${this.baseURI}?${buildURLData({ ...filter, pageIndex, pageSize })}`,
     );
     return { pageData: body!.list, totalCount: body!.count };
   }
@@ -135,7 +140,6 @@ const loadSourceArticles = () => readCSV<SourceArticle>('article.csv');
 
 // Complete migration configuration demonstrating all 4 mapping types
 const mapping: MigrationSchema<SourceArticle, Article> = {
-
   // 1. Many-to-One mapping: Title + Subtitle → combined title
   title: ({ title, subtitle }) => ({
     title: { value: `${title}: ${subtitle}` },
@@ -198,7 +202,7 @@ const migratorWithCustomLogger = new RestMigrator(
   loadSourceArticles,
   ArticleModel,
   mapping,
-  new CustomEventBus()
+  new CustomEventBus(),
 );
 ```
 
@@ -332,3 +336,6 @@ const migrator = new RestMigrator(loadSourceArticles, ArticleModel, mapping, new
 ```
 
 [1]: https://github.com/idea2app/MobX-RESTful
+[2]: https://libraries.io/npm/mobx-restful-migrator
+[3]: https://github.com/idea2app/MobX-RESTful-migrator/actions/workflows/main.yml
+[4]: https://nodei.co/npm/mobx-restful-migrator/
