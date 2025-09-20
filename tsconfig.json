@@ -14,5 +14,12 @@
     "declarationMap": true,
     "outDir": "./dist"
   },
-  "include": ["src/**/*"]
+  "include": ["src/**/*"],
+  "typedocOptions": {
+    "name": "MobX RESTful migrator",
+    "excludeExternals": true,
+    "excludePrivate": true,
+    "readme": "./README.md",
+    "plugin": ["typedoc-plugin-mdn-links"]
+  }
 }
