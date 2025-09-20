@@ -130,7 +130,7 @@ async function* getArticles() {
   try {
     fileHandle = await open('./articles.csv');
 
-    yield* readTextTable<SourceArticle>(fileHandle.createReadStream()) as AsyncGenerator<SourceArticle>;
+    yield* readTextTable<SourceArticle>(fileHandle.createReadStream({ encoding: 'utf-8' }), true) as AsyncGenerator<SourceArticle>;
   } finally {
     await fileHandle?.close();
   }
