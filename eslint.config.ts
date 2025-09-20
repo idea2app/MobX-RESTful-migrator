@@ -16,7 +16,7 @@ export default tsEslint.config(
     },
   },
   // config with just ignores is the replacement for `.eslintignore`
-  { ignores: ['**/node_modules/**', '**/dist/**', 'type/**', '*.ts'] },
+  { ignores: ['**/node_modules/**', '**/dist/**', '*.ts'] },
 
   // extends ...
   eslint.configs.recommended,

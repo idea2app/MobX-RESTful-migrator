@@ -81,8 +81,7 @@ export class RestMigrator<Source extends object, Target extends DataObject> {
     const targetStore = new this.targetModel();
 
     for (const key in mapping) {
-      const { value: initialValue, unique, model } = mapping[key]!;
-      let value = initialValue;
+      let { value, unique, model } = mapping[key]!;
 
       value ??= sourceValue as unknown as Target[keyof Target];
 

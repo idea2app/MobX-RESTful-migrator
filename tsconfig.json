@@ -1,18 +1,18 @@
 {
   "compilerOptions": {
-    "target": "ES2020",
-    "module": "commonjs",
-    "lib": ["ESNext"],
-    "outDir": "./dist",
     "strict": true,
+    "target": "ES2020",
+    "module": "CommonJS",
     "esModuleInterop": true,
-    "skipLibCheck": true,
+    "resolveJsonModule": true,
     "forceConsistentCasingInFileNames": true,
+    "useDefineForClassFields": true,
+    "lib": ["ESNext"],
+    "skipLibCheck": true,
+    "sourceMap": true,
     "declaration": true,
     "declarationMap": true,
-    "sourceMap": true,
-    "useDefineForClassFields": true,
-    "resolveJsonModule": true
+    "outDir": "./dist"
   },
   "include": ["src/**/*"]
 }

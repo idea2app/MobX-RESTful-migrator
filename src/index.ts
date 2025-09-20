@@ -1,3 +1,3 @@
-export { RestMigrator } from './RestMigrator';
-export { ConsoleLogger } from './ConsoleLog';
 export * from './types';
+export * from './ConsoleLog';
+export * from './RestMigrator';

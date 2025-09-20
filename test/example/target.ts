@@ -1,17 +1,12 @@
 import { TableModel } from './model';
 
-export interface User {
+export interface User extends Record<'name' | 'email', string> {
   id: number;
-  name: string;
-  email?: string;
 }
 
-export interface Article {
+export interface Article extends Record<'title' | 'category' | 'content', string> {
   id: number;
-  title: string;
-  category: string;
   tags: string[];
-  content: string;
   author: User;
 }
 

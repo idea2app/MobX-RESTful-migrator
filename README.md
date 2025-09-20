@@ -10,7 +10,7 @@ MobX-RESTful-migrator is a TypeScript library that provides a flexible data migr
 
 - **Flexible Field Mappings**: Support for four different mapping types
 - **Async Generator Pattern**: Control migration flow at your own pace
-- **Cross-table Relationships**: Handle complex data relationships  
+- **Cross-table Relationships**: Handle complex data relationships
 - **Event-Driven Architecture**: Built-in console logging with customizable event bus
 - **TypeScript Support**: Full TypeScript support with type safety
 - **CSV Data Processing**: Built-in CSV file reading and parsing capabilities
@@ -46,49 +46,39 @@ interface SourceArticle {
 
 ```typescript
 import { HTTPClient } from 'koajax';
-import { ListModel, Filter, NewData, DataObject } from 'mobx-restful';
+import { ListModel, DataObject, Filter, IDType, toggle } from 'mobx-restful';
+import { buildURLData } from 'web-utility';
 
-export async function* streamOf<T>(items: T[]) {
-  for (const item of items) yield item;
-}
+export abstract class TableModel<
+  D extends DataObject,
+  F extends Filter<D> = Filter<D>
+> extends ListModel<D, F> {
+  client = new HTTPClient({ baseURI: 'http://localhost:8080', responseType: 'json' });
 
-export abstract class TableModel<T extends DataObject> extends ListModel<T> {
-  client = new HTTPClient();
+  @toggle('uploading')
+  async updateOne(data: Filter<D>, id?: IDType) {
+    const { body } = await (id
+      ? this.client.put<D>(`${this.baseURI}/${id}`, data)
+      : this.client.post<D>(this.baseURI, data));
 
-  indexKey = 'id' as const;
+    return (this.currentOne = body!);
+  }
 
-  private mockData: T[] = [];
-
-  async loadPage(pageIndex = 1, pageSize = 10, filter: Filter<T>) {
-    const filteredList = this.mockData.filter(item =>
-      Object.entries(filter).every(([key, value]) => item[key as keyof T] === value)
+  async loadPage(pageIndex: number, pageSize: number, filter: F) {
+    const { body } = await this.client.get<{ list: D[]; count: number }>(
+      `${this.baseURI}?${buildURLData({ ...filter, pageIndex, pageSize })}`
     );
-    const pageData = filteredList.slice((pageIndex - 1) * pageSize, pageIndex * pageSize);
-
-    return { pageData, totalCount: filteredList.length };
-  }
-
-  async updateOne(data: Partial<NewData<T>>, id?: number) {
-    if (id) {
-      const index = this.mockData.findIndex(item => item.id === id);
-
-      data = Object.assign(this.mockData[index], data);
-    } else {
-      data = { id: this.mockData.length + 1, ...data };
-
-      this.mockData.push(data as T);
-    }
-    return data as T;
+    return { pageData: body!.list, totalCount: body!.count };
   }
 }
 
-interface User {
+export interface User {
   id: number;
   name: string;
   email?: string;
 }
 
-interface Article {
+export interface Article {
   id: number;
   title: string;
   category: string;
@@ -97,11 +87,11 @@ interface Article {
   author: User;
 }
 
-class UserModel extends TableModel<User> {
+export class UserModel extends TableModel<User> {
   baseURI = '/users';
 }
 
-class ArticleModel extends TableModel<Article> {
+export class ArticleModel extends TableModel<Article> {
   baseURI = '/articles';
 }
 ```
@@ -123,18 +113,24 @@ import { RestMigrator, MigrationSchema, ConsoleLogger } from 'mobx-restful-migra
 import { FileHandle, open } from 'fs/promises';
 import { readTextTable } from 'web-utility';
 
+import { SourceArticle, Article, ArticleModel, UserModel } from './source';
+
 // Load and parse CSV data using async streaming for large files
-async function* getArticles() {
+async function* readCSV<T extends object>(path: string) {
   let fileHandle: FileHandle | undefined;
 
   try {
-    fileHandle = await open('./articles.csv');
+    fileHandle = await open(path);
 
-    yield* readTextTable<SourceArticle>(fileHandle.createReadStream({ encoding: 'utf-8' }), true) as AsyncGenerator<SourceArticle>;
+    const stream = fileHandle.createReadStream({ encoding: 'utf-8' });
+
+    yield* readTextTable<T>(stream, true) as AsyncGenerator<T>;
   } finally {
     await fileHandle?.close();
   }
 }
+
+const loadSourceArticles = () => readCSV<SourceArticle>('article.csv');
 
 // Complete migration configuration demonstrating all 4 mapping types
 const mapping: MigrationSchema<SourceArticle, Article> = {
@@ -162,36 +158,39 @@ const mapping: MigrationSchema<SourceArticle, Article> = {
 };
 
 // Run migration with built-in console logging (default)
-const migrator = new RestMigrator(getArticles, ArticleModel, mapping);
+const migrator = new RestMigrator(loadSourceArticles, ArticleModel, mapping);
 
 // The ConsoleLogger automatically logs each step:
 // - saved No.X: successful migrations with source, mapped, and target data
-// - skipped No.X: skipped items (duplicate unique fields)  
+// - skipped No.X: skipped items (duplicate unique fields)
 // - error at No.X: migration errors with details
 
-for await (const result of migrator.boot()) {
+for await (const { title } of migrator.boot()) {
   // Process the migrated target objects
-  console.log(`Successfully migrated article: ${result.title}`);
+  console.log(`Successfully migrated article: ${title}`);
 }
+```
 
-// Optional: Use custom event bus
+#### Optional: Use custom event bus
+
+```typescript
 class CustomEventBus implements MigrationEventBus<SourceArticle, Article> {
   async save({ index, targetItem }) {
     console.log(`✅ Migrated article ${index}: ${targetItem?.title}`);
   }
-  
+
   async skip({ index, error }) {
     console.log(`⚠️  Skipped article ${index}: ${error?.message}`);
   }
-  
+
   async error({ index, error }) {
     console.log(`❌ Error at article ${index}: ${error?.message}`);
   }
 }
 
 const migratorWithCustomLogger = new RestMigrator(
-  getArticles, 
-  ArticleModel, 
+  loadSourceArticles,
+  ArticleModel,
   mapping,
   new CustomEventBus()
 );
@@ -262,17 +261,19 @@ By default, RestMigrator uses the `ConsoleLogger` which provides detailed consol
 ```typescript
 import { RestMigrator, ConsoleLogger } from 'mobx-restful-migrator';
 
-// ConsoleLogger is used by default
-const migrator = new RestMigrator(getArticles, ArticleModel, mapping);
+import { loadSourceArticles, ArticleModel, mapping } from './source';
 
-for await (const result of migrator.boot()) {
+// ConsoleLogger is used by default
+const migrator = new RestMigrator(loadSourceArticles, ArticleModel, mapping);
+
+for await (const { title } of migrator.boot()) {
   // Console automatically shows:
   // - saved No.X with source, mapped, and target data tables
-  // - skipped No.X for duplicate unique fields  
+  // - skipped No.X for duplicate unique fields
   // - error at No.X for migration errors
-  
+
   // Your processing logic here
-  console.log(`✅ Article migrated: ${result.title}`);
+  console.log(`✅ Article migrated: ${title}`);
 }
 ```
 
@@ -282,45 +283,44 @@ Implement your own event bus for custom logging and monitoring:
 
 ```typescript
 import { MigrationEventBus, MigrationProgress } from 'mobx-restful-migrator';
-import { writeFile } from 'fs/promises';
+import { outputJSON } from 'fs-extra';
 
-class DatabaseLogger implements MigrationEventBus<SourceArticle, Article> {
+import { SourceArticle, Article, loadSourceArticles, ArticleModel, mapping } from './source';
+
+class FileLogger implements MigrationEventBus<SourceArticle, Article> {
+  bootedAt = new Date().toJSON();
+
   async save({ index, sourceItem, targetItem }: MigrationProgress<SourceArticle, Article>) {
-    // Log to database, send notifications, etc. using async file operations
-    const logEntry = JSON.stringify({ 
-      type: 'success', 
-      index, 
-      sourceId: sourceItem?.id, 
+    // Log to file, send notifications, etc. using async file operations
+    await outputJSON(`logs/save-${this.bootedAt}.json`, {
+      type: 'success',
+      index,
+      sourceId: sourceItem?.id,
       targetId: targetItem?.id,
-      timestamp: new Date().toISOString()
+      savedAt: new Date().toJSON(),
     });
-    await writeFile(`./logs/migration-${Date.now()}.json`, logEntry);
-    await logToDatabase('success', { index, sourceId: sourceItem?.id, targetId: targetItem?.id });
   }
-  
-  async skip({ index, error }: MigrationProgress<SourceArticle, Article>) {
-    const logEntry = JSON.stringify({ 
-      type: 'skip', 
-      index, 
-      reason: error?.message,
-      timestamp: new Date().toISOString()
-    });
-    await writeFile(`./logs/skip-${Date.now()}.json`, logEntry);
-    await logToDatabase('skip', { index, reason: error?.message });
-  }
-  
-  async error({ index, error }: MigrationProgress<SourceArticle, Article>) {
-    const logEntry = JSON.stringify({ 
-      type: 'error', 
-      index, 
+
+  async skip({ index, sourceItem, error }: MigrationProgress<SourceArticle, Article>) {
+    await outputJSON(`logs/skip-${this.bootedAt}.json`, {
+      type: 'skipped',
+      index,
+      sourceId: sourceItem?.id,
       error: error?.message,
-      timestamp: new Date().toISOString()
+      skippedAt: new Date().toJSON(),
     });
-    await writeFile(`./logs/error-${Date.now()}.json`, logEntry);
-    await logToDatabase('error', { index, error: error?.message });
-    await sendErrorAlert(error);
+  }
+
+  async error({ index, sourceItem, error }: MigrationProgress<SourceArticle, Article>) {
+    await outputJSON(`logs/error-${this.bootedAt}.json`, {
+      type: 'error',
+      index,
+      sourceId: sourceItem?.id,
+      error: error?.message,
+      errorAt: new Date().toJSON(),
+    });
   }
 }
 
-const migrator = new RestMigrator(getArticles, ArticleModel, mapping, new DatabaseLogger());
+const migrator = new RestMigrator(loadSourceArticles, ArticleModel, mapping, new FileLogger());
 ```

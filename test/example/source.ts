@@ -1,15 +1,9 @@
 import { FileHandle, open } from 'fs/promises';
 import { readTextTable } from 'web-utility';
 
-// Sample source data representing articles table
-export interface SourceArticle {
+export interface SourceArticle
+  extends Record<'title' | 'subtitle' | 'keywords' | 'content' | 'author' | 'email', string> {
   id: number;
-  title: string;
-  subtitle: string;
-  keywords: string; // comma-separated string to be split into tags array
-  content: string;
-  author: string;
-  email?: string;
 }
 
 export async function* readCSV<T extends object>(path: string) {
@@ -18,10 +12,12 @@ export async function* readCSV<T extends object>(path: string) {
   try {
     fileHandle = await open(path);
 
-    yield* readTextTable<T>(fileHandle.createReadStream({ encoding: 'utf-8' }), true) as AsyncGenerator<T>;
+    const stream = fileHandle.createReadStream({ encoding: 'utf-8' });
+
+    yield* readTextTable<T>(stream, true) as AsyncGenerator<T>;
   } finally {
     await fileHandle?.close();
   }
 }
 
-export const createSourceStream = () => readCSV<SourceArticle>('test/example/article.csv');
+export const loadSourceArticles = () => readCSV<SourceArticle>('test/example/article.csv');

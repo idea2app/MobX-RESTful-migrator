@@ -9,6 +9,7 @@
     "restful",
     "data",
     "migration",
+    "crawler",
     "typescript"
   ],
   "repository": {
@@ -58,11 +59,9 @@
     ]
   },
   "scripts": {
-    "build": "tsc",
+    "test": "eslint src --ext .ts --fix  &&  jest",
     "dev": "tsc --watch",
-    "test": "jest",
-    "lint": "eslint src --ext .ts",
-    "lint:fix": "eslint src --ext .ts --fix",
-    "prepare": "npm run build"
+    "build": "rm -rf dist/  &&  tsc",
+    "prepublishOnly": "npm test  &&  npm run build"
   }
 }

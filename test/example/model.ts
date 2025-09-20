@@ -1,14 +1,8 @@
 import { HTTPClient } from 'koajax';
 import { ListModel, Filter, NewData, DataObject } from 'mobx-restful';
 
-export async function* streamOf<T>(items: T[]) {
-  for (const item of items) yield item;
-}
-
 export abstract class TableModel<T extends DataObject> extends ListModel<T> {
   client = new HTTPClient();
-
-  indexKey = 'id' as const;
 
   private mockData: T[] = [];
 
