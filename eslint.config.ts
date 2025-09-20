@@ -1,28 +1,55 @@
-import js from '@eslint/js';
-import tsParser from '@typescript-eslint/parser';
-import tsPlugin from '@typescript-eslint/eslint-plugin';
+import eslint from '@eslint/js';
+import eslintConfigPrettier from 'eslint-config-prettier';
+import simpleImportSortPlugin from 'eslint-plugin-simple-import-sort';
+import globals from 'globals';
+import tsEslint from 'typescript-eslint';
+import { fileURLToPath } from 'url';
 
-export default [
-  js.configs.recommended,
+const tsconfigRootDir = fileURLToPath(new URL('.', import.meta.url));
+
+export default tsEslint.config(
+  // register all of the plugins up-front
   {
-    files: ['**/*.ts'],
+    plugins: {
+      '@typescript-eslint': tsEslint.plugin,
+      'simple-import-sort': simpleImportSortPlugin,
+    },
+  },
+  // config with just ignores is the replacement for `.eslintignore`
+  { ignores: ['**/node_modules/**', '**/dist/**', 'type/**', '*.ts'] },
+
+  // extends ...
+  eslint.configs.recommended,
+  ...tsEslint.configs.recommended,
+
+  // base config
+  {
     languageOptions: {
-      parser: tsParser,
+      globals: { ...globals.es2022, ...globals.node },
       parserOptions: {
-        ecmaVersion: 'latest',
-        sourceType: 'module',
+        projectService: true,
+        tsconfigRootDir,
+        warnOnUnsupportedTypeScriptVersion: false,
       },
     },
-    plugins: {
-      '@typescript-eslint': tsPlugin,
-    },
     rules: {
-      ...tsPlugin.configs.recommended.rules,
-      '@typescript-eslint/no-unused-vars': 'error',
-      '@typescript-eslint/no-explicit-any': 'warn',
+      'simple-import-sort/exports': 'error',
+      'simple-import-sort/imports': 'error',
+      '@typescript-eslint/no-unused-vars': 'warn',
+      '@typescript-eslint/no-empty-object-type': 'off',
+      '@typescript-eslint/no-unsafe-declaration-merging': 'warn',
     },
   },
   {
-    ignores: ['dist/**', 'node_modules/**'],
+    files: ['**/*.js'],
+    extends: [tsEslint.configs.disableTypeChecked],
+    rules: {
+      // turn off other type-aware rules
+      '@typescript-eslint/internal/no-poorly-typed-ts-props': 'off',
+
+      // turn off rules that don't apply to JS code
+      '@typescript-eslint/explicit-function-return-type': 'off',
+    },
   },
-];
+  eslintConfigPrettier
+);

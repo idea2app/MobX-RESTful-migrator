@@ -9,7 +9,7 @@ MobX-RESTful-migrator is a TypeScript library that provides a flexible data migr
 ## Features
 
 - **Flexible Field Mappings**: Support for four different mapping types
-- **Async Generator Pattern**: Control migration flow at your own pace  
+- **Async Generator Pattern**: Control migration flow at your own pace
 - **Cross-table Relationships**: Handle complex data relationships
 - **User-Controlled Error Handling**: You manage counting and error handling externally
 - **TypeScript Support**: Full TypeScript support with type safety
@@ -23,6 +23,7 @@ npm install mobx-restful mobx-restful-migrator
 ## Usage Example: Article Migration
 
 The typical use case is migrating article data with the following schema:
+
 - **Source**: Article table with Title, Keywords, Content, Author, Email fields
 - **Target**: Keywords field splits into tags array, Author/Email fields map to User table
 
@@ -33,10 +34,10 @@ interface SourceArticle {
   id: number;
   title: string;
   subtitle: string;
-  keywords: string;  // comma-separated keywords to split into tags
+  keywords: string; // comma-separated keywords to split into tags
   content: string;
-  author: string;    // maps to User table name field
-  email: string;     // maps to User table email field
+  author: string; // maps to User table name field
+  email: string; // maps to User table email field
 }
 ```
 
@@ -106,10 +107,9 @@ class ArticleModel extends TableModel<Article> {
 
 ### Migration Configuration
 
-First, prepare your CSV data file:
+First, prepare your CSV data file `articles.csv`:
 
 ```csv
-// articles.csv
 title,subtitle,keywords,content,author,email
 Introduction to TypeScript,A Comprehensive Guide,"typescript,javascript,programming","TypeScript is a typed superset of JavaScript...",John Doe,john@example.com
 MobX State Management,Made Simple,"mobx,react,state-management","MobX makes state management simple...",Jane Smith,jane@example.com
@@ -126,7 +126,7 @@ async function* getArticles() {
   const csvText = await readText('./articles.csv');
   const rows = csvText.trim().split('\n');
   const headers = rows[0].split(',');
-  
+
   for (let i = 1; i < rows.length; i++) {
     const values = rows[i].split(',');
     const article = {};
@@ -141,25 +141,25 @@ async function* getArticles() {
 const mapping: MigrationConfig<SourceArticle, Article> = {
   // 1. Many-to-One mapping: Title + Subtitle → combined title
   title: ({ title, subtitle }) => ({
-    title: { value: `${title}: ${subtitle}` }
+    title: { value: `${title}: ${subtitle}` },
   }),
-  
+
   content: 'content',
-  
+
   // 2. One-to-Many mapping: Keywords string → category string & tags array
   keywords: ({ keywords }) => {
     const [category, ...tags] = keywords.split(',').map(tag => tag.trim());
-  
+
     return { category: { value: category }, tags: { value: tags } };
   },
-  
+
   // 3. Cross-table relationship: Author/Email → User table
   author: ({ author, email }) => ({
     author: {
       value: { name: author, email },
-      model: UserModel  // Maps to User table via ListModel
-    }
-  })
+      model: UserModel, // Maps to User table via ListModel
+    },
+  }),
 };
 
 // Run migration with user-controlled counting and error handling
@@ -170,7 +170,7 @@ for await (const result of migrator.boot()) {
   count++;
   console.log(`Processed: ${count} articles`);
   console.log(`Migrated article: ${result.title}`);
-  
+
   // Users handle their own error management
   try {
     // Process the migrated data as needed
@@ -193,7 +193,7 @@ Map source field directly to target field using string mapping:
 ```typescript
 const mapping = {
   title: 'title',
-  content: 'content'
+  content: 'content',
 };
 ```
 
@@ -204,8 +204,8 @@ Use resolver function to combine multiple source fields into one target field:
 ```typescript
 const mapping = {
   title: ({ title, subtitle }) => ({
-    title: { value: `${title}: ${subtitle}` }
-  })
+    title: { value: `${title}: ${subtitle}` },
+  }),
 };
 ```
 
@@ -217,9 +217,9 @@ Use resolver function to map one source field to multiple target fields with `va
 const mapping = {
   keywords: ({ keywords }) => {
     const [category, ...tags] = keywords.split(',').map(tag => tag.trim());
-  
+
     return { category: { value: category }, tags: { value: tags } };
-  }
+  },
 };
 ```
 
@@ -232,9 +232,9 @@ const mapping = {
   author: ({ author, email }) => ({
     author: {
       value: { name: author, email },
-      model: UserModel  // References User ListModel
-    }
-  })
+      model: UserModel, // References User ListModel
+    },
+  }),
 };
 ```
 

@@ -1,14 +1,15 @@
-import 'core-js/es/array/from-async';
 import { DataObject, Filter, ListModel } from 'mobx-restful';
 import { Constructor } from 'web-utility';
 
-import { MigrationConfig, TargetPatch } from './types';
+import { MigrationEventBus, MigrationSchema, ProgressTarget, TargetPatch } from './types';
+import { ConsoleLogger } from './ConsoleLog';
 
 export class RestMigrator<Source extends object, Target extends DataObject> {
   constructor(
     private dataSource: () => AsyncGenerator<Source>,
     private targetModel: Constructor<ListModel<Target>>,
-    private fieldMapping: MigrationConfig<Source, Target>
+    private fieldMapping: MigrationSchema<Source, Target>,
+    private eventBus: MigrationEventBus<Source, Target> = new ConsoleLogger<Source, Target>()
   ) {}
 
   /**
@@ -16,36 +17,66 @@ export class RestMigrator<Source extends object, Target extends DataObject> {
    */
   async *boot() {
     const targetStore = new this.targetModel();
+    let index = 0;
 
     for await (const sourceItem of this.dataSource()) {
-      const mappedData = Object.fromEntries(await Array.fromAsync(this.mapFields(sourceItem)));
+      let mappedData: Partial<Target> | undefined;
 
-      yield targetStore.updateOne(mappedData as Target);
+      try {
+        const fieldParts = this.mapFields(sourceItem, ++index);
+
+        mappedData = Object.fromEntries(await Array.fromAsync(fieldParts)) as Partial<Target>;
+
+        const targetItem = await targetStore.updateOne(mappedData);
+        yield targetItem;
+
+        await this.eventBus.save({ index, sourceItem, mappedData, targetItem });
+      } catch (error: any) {
+        const isSkip = error instanceof RangeError;
+
+        await (isSkip ? this.eventBus.skip : this.eventBus.error)({
+          index,
+          sourceItem,
+          mappedData,
+          error,
+        });
+      }
     }
   }
 
   /**
    * Maps source data fields to target model fields according to the configuration
    */
-  private async *mapFields(sourceData: Source) {
+  private async *mapFields(sourceItem: Source, index: number) {
     for (const sourceField in this.fieldMapping) {
       const mapping = this.fieldMapping[sourceField],
-        value = sourceData[sourceField];
+        value = sourceItem[sourceField];
 
       const resolvedMapping =
         typeof mapping === 'function'
-          ? await mapping(sourceData)
+          ? await mapping(sourceItem)
           : typeof mapping === 'string'
           ? { [mapping]: { value } }
           : mapping!;
 
-      yield* this.applyObjectMapping(value, resolvedMapping as TargetPatch<Target>);
+      yield* this.applyObjectMapping(
+        value,
+        resolvedMapping as TargetPatch<Target>,
+        (mappedData, targetItem) =>
+          this.eventBus.save({ index, sourceItem, mappedData, targetItem }),
+        (mappedData, error) => this.eventBus.error({ index, sourceItem, mappedData, error })
+      );
     }
   }
 
   private async *applyObjectMapping(
     sourceValue: Source[keyof Source],
-    mapping: TargetPatch<Target>
+    mapping: TargetPatch<Target>,
+    onRelationSave: (
+      mappedData: Partial<ProgressTarget<Target>>,
+      targetItem: ProgressTarget<Target>
+    ) => any,
+    onRelationError: (mappedData: Partial<ProgressTarget<Target>>, error: Error) => any
   ) {
     const targetStore = new this.targetModel();
 
@@ -60,11 +91,19 @@ export class RestMigrator<Source extends object, Target extends DataObject> {
         const [existed] = await targetStore.getList({ [key]: value } as Filter<Target>, 1, 1);
 
         if (existed) throw new RangeError(`Duplicate value for unique field '${key}': ${value}`);
-      } else if (model) {
-        const relatedStore = new model();
+      } else if (model)
+        try {
+          const relatedStore = new model();
 
-        ({ [relatedStore.indexKey]: value } = await relatedStore.updateOne(value));
-      }
+          const savedValue = await relatedStore.updateOne(value);
+
+          onRelationSave(value, savedValue);
+
+          value = savedValue[relatedStore.indexKey];
+        } catch (error) {
+          onRelationError(value as Partial<ProgressTarget<Target>>, error as Error);
+          continue;
+        }
       yield [key, value!] as const;
     }
   }

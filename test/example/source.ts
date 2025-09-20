@@ -1,4 +1,5 @@
-import { streamOf } from './model';
+import { FileHandle, open } from 'fs/promises';
+import { readTextTable } from 'web-utility';
 
 // Sample source data representing articles table
 export interface SourceArticle {
@@ -11,25 +12,16 @@ export interface SourceArticle {
   email?: string;
 }
 
-export const sampleArticles: SourceArticle[] = [
-  {
-    id: 1,
-    title: 'Introduction to TypeScript',
-    subtitle: 'A Comprehensive Guide',
-    keywords: 'typescript,javascript,programming',
-    content: 'TypeScript is a typed superset of JavaScript...',
-    author: 'John Doe',
-    email: 'john@example.com',
-  },
-  {
-    id: 2,
-    title: 'MobX State Management',
-    subtitle: 'Made Simple',
-    keywords: 'mobx,react,state-management',
-    content: 'MobX is a battle tested library that makes state management simple...',
-    author: 'Jane Smith',
-    email: 'jane@example.com',
-  },
-];
+export async function* readCSV<T extends object>(path: string) {
+  let fileHandle: FileHandle | undefined;
 
-export const createSourceStream = () => streamOf(sampleArticles);
+  try {
+    fileHandle = await open(path);
+
+    yield* readTextTable<T>(fileHandle.createReadStream()) as AsyncGenerator<T>;
+  } finally {
+    await fileHandle?.close();
+  }
+}
+
+export const createSourceStream = () => readCSV<SourceArticle>('test/example/articles.csv');
