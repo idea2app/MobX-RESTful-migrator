@@ -20,7 +20,7 @@ export class UserModel extends TableModel<User> {
   mockData = mockUsers;
 }
 
-const mockArticles: Article[] = [];
+export const mockArticles: Article[] = [];
 
 export class ArticleModel extends TableModel<Article> {
   baseURI = '/articles';

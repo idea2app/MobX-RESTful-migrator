@@ -4,7 +4,7 @@ import { sleep } from 'web-utility';
 import { RestMigrator } from '../src/RestMigrator';
 import { MigrationSchema } from '../src/types';
 import { loadSourceArticles, SourceArticle } from './example/source';
-import { ArticleModel, UserModel, Article } from './example/target';
+import { ArticleModel, UserModel, Article, mockArticles } from './example/target';
 
 describe('RestMigrator', () => {
   let sampleArticles: SourceArticle[];
@@ -120,5 +120,18 @@ describe('RestMigrator', () => {
     expect(results).toHaveLength(2);
     expect(results[0].author).toBeInstanceOf(Object);
     expect(results[1].author).toBeInstanceOf(Object);
+  });
+
+  it('should handle dry run mode', async () => {
+    mockArticles.length = 0;
+
+    const migrator = new RestMigrator(loadSourceArticles, ArticleModel, {
+      title: 'title',
+      content: 'content',
+    });
+    const results = await Array.fromAsync(migrator.boot({ dryRun: true }));
+
+    expect(mockArticles).toHaveLength(0);
+    expect(results).toHaveLength(2);
   });
 });
