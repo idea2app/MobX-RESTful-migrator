@@ -1,10 +1,11 @@
 import 'core-js/es/array/from-async';
+
 import { sleep } from 'web-utility';
 
 import { RestMigrator } from '../src/RestMigrator';
 import { MigrationSchema } from '../src/types';
 import { loadSourceArticles, SourceArticle } from './example/source';
-import { ArticleModel, UserModel, Article, mockArticles } from './example/target';
+import { Article, ArticleModel, mockArticles, UserModel } from './example/target';
 
 describe('RestMigrator', () => {
   let sampleArticles: SourceArticle[];
@@ -122,7 +123,7 @@ describe('RestMigrator', () => {
     expect(results[1].author).toBeInstanceOf(Object);
   });
 
-  it('should handle dry run mode', async () => {
+  it('should handle Dry run mode', async () => {
     mockArticles.length = 0;
 
     const migrator = new RestMigrator(loadSourceArticles, ArticleModel, {

@@ -1,4 +1,3 @@
-import { AsyncIterator } from 'async-iterator-helpers-ponyfill';
 import { DataObject, Filter, ListModel } from 'mobx-restful';
 import { Constructor } from 'web-utility';
 
@@ -17,7 +16,7 @@ export class RestMigrator<Source extends object, Target extends DataObject> {
 
   constructor(
     private dataSource: () => Iterable<Source> | AsyncIterable<Source>,
-    private targetModel: Constructor<ListModel<Target>>,
+    private TargetModel: Constructor<ListModel<Target>>,
     private fieldMapping: MigrationSchema<Source, Target>,
     private eventBus: MigrationEventBus<Source, Target> = new ConsoleLogger<Source, Target>(),
   ) {}
@@ -25,37 +24,29 @@ export class RestMigrator<Source extends object, Target extends DataObject> {
   /**
    * Main migration method that yields progress information
    */
-  async *boot({ dryRun = this.dryRun, concurrency = 1 }: BootOption = {}) {
+  async *boot({ dryRun = this.dryRun }: BootOption = {}) {
     this.dryRun = dryRun;
 
-    const stream = AsyncIterator.from(this.dataSource());
-    let batch = 0;
+    const targetStore = new this.TargetModel();
+    let index = 0;
 
-    do {
-      yield* this.migrateBatch(stream.take(concurrency), concurrency, ++batch);
-    } while (true);
-  }
-
-  async *migrateBatch(stream: AsyncIterator<Source>, concurrency: number, batch: number) {
-    const targetStore = new this.targetModel();
-    let index = concurrency * (batch - 1);
-
-    for await (const sourceItem of stream) {
+    for await (const sourceItem of this.dataSource()) {
       let mappedData: Partial<Target> | undefined;
 
       try {
-        const fieldParts = this.mapFields(sourceItem, ++index, batch);
+        const fieldParts = this.mapFields(sourceItem, ++index);
 
         mappedData = Object.fromEntries(await Array.fromAsync(fieldParts)) as Partial<Target>;
 
-        if (this.dryRun) throw new RangeError('Dry run - skipping save');
+        if (dryRun) yield mappedData;
+        else {
+          const targetItem = await targetStore.updateOne(mappedData);
+          yield targetItem;
 
-        const targetItem = await targetStore.updateOne(mappedData);
-        yield targetItem;
-
-        await this.eventBus.save({ index, batch, sourceItem, mappedData, targetItem });
+          await this.eventBus.save({ index, sourceItem, mappedData, targetItem });
+        }
       } catch (error: unknown) {
-        await this.handleError({ index, batch, sourceItem, mappedData, error: error as Error });
+        await this.handleError({ index, sourceItem, mappedData, error: error as Error });
       }
     }
   }
@@ -72,7 +63,7 @@ export class RestMigrator<Source extends object, Target extends DataObject> {
   /**
    * Maps source data fields to target model fields according to the configuration
    */
-  private async *mapFields(sourceItem: Source, index: number, batch: number) {
+  private async *mapFields(sourceItem: Source, index: number) {
     for (const sourceField in this.fieldMapping) {
       const mapping = this.fieldMapping[sourceField],
         value = sourceItem[sourceField];
@@ -88,8 +79,8 @@ export class RestMigrator<Source extends object, Target extends DataObject> {
         value,
         resolvedMapping as TargetPatch<Target>,
         (mappedData, targetItem) =>
-          this.eventBus.save({ index, batch, sourceItem, mappedData, targetItem }),
-        (mappedData, error) => this.handleError({ index, batch, sourceItem, mappedData, error }),
+          this.eventBus.save({ index, sourceItem, mappedData, targetItem }),
+        (mappedData, error) => this.handleError({ index, sourceItem, mappedData, error }),
       );
     }
   }
@@ -106,7 +97,9 @@ export class RestMigrator<Source extends object, Target extends DataObject> {
       error: Error,
     ) => any | Promise<any>,
   ) {
-    const targetStore = new this.targetModel();
+    const { TargetModel, dryRun } = this;
+
+    const targetStore = new TargetModel();
 
     for (const key in mapping) {
       let { value, unique, model } = mapping[key]!;
@@ -119,11 +112,10 @@ export class RestMigrator<Source extends object, Target extends DataObject> {
         const [existed] = await targetStore.getList({ [key]: value } as Filter<Target>, 1, 1);
 
         if (existed) throw new RangeError(`Duplicate value for unique field '${key}': ${value}`);
-      } else if (model)
+      } else if (model && !dryRun)
         try {
-          if (this.dryRun) throw new RangeError('Dry run - skipping relation save');
-
           const relatedStore = new model();
+
           const savedValue = await relatedStore.updateOne(value);
 
           await onRelationSave(value, savedValue);

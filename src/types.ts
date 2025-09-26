@@ -22,7 +22,6 @@ export type ProgressTarget<Target extends object> = Target | Target[TypeKeys<Tar
 
 export interface MigrationProgress<Source extends object, Target extends object> {
   index: number;
-  batch: number;
   sourceItem?: Source;
   mappedData?: Partial<ProgressTarget<Target>>;
   targetItem?: ProgressTarget<Target>;
@@ -36,5 +35,4 @@ export type MigrationEventBus<Source extends object, Target extends object> = Re
 
 export interface BootOption {
   dryRun?: boolean;
-  concurrency?: number;
 }
