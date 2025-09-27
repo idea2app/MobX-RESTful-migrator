@@ -1,22 +1,33 @@
 import { DataObject, Filter, ListModel } from 'mobx-restful';
-import { Constructor } from 'web-utility';
+import { Constructor, isEmpty } from 'web-utility';
 
 import { ConsoleLogger } from './ConsoleLog';
-import { MigrationEventBus, MigrationSchema, ProgressTarget, TargetPatch } from './types';
+import {
+  BootOption,
+  MigrationEventBus,
+  MigrationProgress,
+  MigrationSchema,
+  ProgressTarget,
+  TargetPatch,
+} from './types';
 
 export class RestMigrator<Source extends object, Target extends DataObject> {
+  dryRun = false;
+
   constructor(
-    private dataSource: () => AsyncGenerator<Source>,
-    private targetModel: Constructor<ListModel<Target>>,
+    private dataSource: () => Iterable<Source> | AsyncIterable<Source>,
+    private TargetModel: Constructor<ListModel<Target>>,
     private fieldMapping: MigrationSchema<Source, Target>,
-    private eventBus: MigrationEventBus<Source, Target> = new ConsoleLogger<Source, Target>()
+    private eventBus: MigrationEventBus<Source, Target> = new ConsoleLogger<Source, Target>(),
   ) {}
 
   /**
    * Main migration method that yields progress information
    */
-  async *boot() {
-    const targetStore = new this.targetModel();
+  async *boot({ dryRun = this.dryRun }: BootOption = {}) {
+    this.dryRun = dryRun;
+
+    const targetStore = new this.TargetModel();
     let index = 0;
 
     for await (const sourceItem of this.dataSource()) {
@@ -27,21 +38,26 @@ export class RestMigrator<Source extends object, Target extends DataObject> {
 
         mappedData = Object.fromEntries(await Array.fromAsync(fieldParts)) as Partial<Target>;
 
-        const targetItem = await targetStore.updateOne(mappedData);
-        yield targetItem;
+        if (dryRun) yield mappedData;
+        else {
+          const targetItem = await targetStore.updateOne(mappedData);
+          yield targetItem;
 
-        await this.eventBus.save({ index, sourceItem, mappedData, targetItem });
+          await this.eventBus.save({ index, sourceItem, mappedData, targetItem });
+        }
       } catch (error: unknown) {
-        const isSkip = error instanceof RangeError;
-
-        await (isSkip ? this.eventBus.skip : this.eventBus.error)({
-          index,
-          sourceItem,
-          mappedData,
-          error: error as Error,
-        });
+        await this.handleError({ index, sourceItem, mappedData, error: error as Error });
       }
     }
+  }
+
+  private async handleError({ error, ...progress }: MigrationProgress<Source, Target>) {
+    const isSkip = error instanceof RangeError;
+
+    await (isSkip ? this.eventBus.skip : this.eventBus.error)({
+      ...progress,
+      error: error as Error,
+    });
   }
 
   /**
@@ -56,15 +72,15 @@ export class RestMigrator<Source extends object, Target extends DataObject> {
         typeof mapping === 'function'
           ? await mapping(sourceItem)
           : typeof mapping === 'string'
-          ? { [mapping]: { value } }
-          : mapping!;
+            ? { [mapping]: { value } }
+            : mapping!;
 
       yield* this.applyObjectMapping(
         value,
         resolvedMapping as TargetPatch<Target>,
         (mappedData, targetItem) =>
           this.eventBus.save({ index, sourceItem, mappedData, targetItem }),
-        (mappedData, error) => this.eventBus.error({ index, sourceItem, mappedData, error })
+        (mappedData, error) => this.handleError({ index, sourceItem, mappedData, error }),
       );
     }
   }
@@ -74,11 +90,16 @@ export class RestMigrator<Source extends object, Target extends DataObject> {
     mapping: TargetPatch<Target>,
     onRelationSave: (
       mappedData: Partial<ProgressTarget<Target>>,
-      targetItem: ProgressTarget<Target>
-    ) => void,
-    onRelationError: (mappedData: Partial<ProgressTarget<Target>>, error: Error) => void
+      targetItem: ProgressTarget<Target>,
+    ) => any | Promise<any>,
+    onRelationError: (
+      mappedData: Partial<ProgressTarget<Target>>,
+      error: Error,
+    ) => any | Promise<any>,
   ) {
-    const targetStore = new this.targetModel();
+    const { TargetModel, dryRun } = this;
+
+    const targetStore = new TargetModel();
 
     for (const key in mapping) {
       let { value, unique, model } = mapping[key]!;
@@ -91,17 +112,19 @@ export class RestMigrator<Source extends object, Target extends DataObject> {
         const [existed] = await targetStore.getList({ [key]: value } as Filter<Target>, 1, 1);
 
         if (existed) throw new RangeError(`Duplicate value for unique field '${key}': ${value}`);
-      } else if (model)
+      } else if (isEmpty(value)) {
+        continue;
+      } else if (model && !dryRun)
         try {
           const relatedStore = new model();
 
           const savedValue = await relatedStore.updateOne(value);
 
-          onRelationSave(value, savedValue);
+          await onRelationSave(value, savedValue);
 
           value = savedValue[relatedStore.indexKey];
         } catch (error) {
-          onRelationError(value as Partial<ProgressTarget<Target>>, error as Error);
+          await onRelationError(value as Partial<ProgressTarget<Target>>, error as Error);
           continue;
         }
       yield [key, value!] as const;

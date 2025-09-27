@@ -32,3 +32,7 @@ export type MigrationEventBus<Source extends object, Target extends object> = Re
   'save' | 'skip' | 'error',
   (progress: MigrationProgress<Source, Target>) => Promise<void>
 >;
+
+export interface BootOption {
+  dryRun?: boolean;
+}

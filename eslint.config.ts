@@ -35,6 +35,8 @@ export default tsEslint.config(
     rules: {
       'simple-import-sort/exports': 'error',
       'simple-import-sort/imports': 'error',
+      'prefer-const': 'warn',
+      '@typescript-eslint/no-explicit-any': 'warn',
       '@typescript-eslint/no-unused-vars': 'warn',
       '@typescript-eslint/no-empty-object-type': 'off',
       '@typescript-eslint/no-unsafe-declaration-merging': 'warn',
@@ -51,5 +53,5 @@ export default tsEslint.config(
       '@typescript-eslint/explicit-function-return-type': 'off',
     },
   },
-  eslintConfigPrettier
+  eslintConfigPrettier,
 );
