@@ -1,5 +1,5 @@
 import { DataObject, Filter, ListModel } from 'mobx-restful';
-import { Constructor } from 'web-utility';
+import { Constructor, isEmpty } from 'web-utility';
 
 import { ConsoleLogger } from './ConsoleLog';
 import {
@@ -112,6 +112,8 @@ export class RestMigrator<Source extends object, Target extends DataObject> {
         const [existed] = await targetStore.getList({ [key]: value } as Filter<Target>, 1, 1);
 
         if (existed) throw new RangeError(`Duplicate value for unique field '${key}': ${value}`);
+      } else if (isEmpty(value)) {
+        continue;
       } else if (model && !dryRun)
         try {
           const relatedStore = new model();
