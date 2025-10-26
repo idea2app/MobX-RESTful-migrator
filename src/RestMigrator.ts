@@ -38,13 +38,13 @@ export class RestMigrator<Source extends object, Target extends DataObject> {
 
         mappedData = Object.fromEntries(await Array.fromAsync(fieldParts)) as Partial<Target>;
 
-        if (dryRun) yield mappedData;
-        else {
-          const targetItem = await targetStore.updateOne(mappedData);
-          yield targetItem;
+        const targetItem = dryRun
+          ? (mappedData as Awaited<ReturnType<typeof targetStore.updateOne>>)
+          : await targetStore.updateOne(mappedData);
 
-          await this.eventBus.save({ index, sourceItem, mappedData, targetItem });
-        }
+        yield targetItem;
+
+        await this.eventBus.save({ index, sourceItem, mappedData, targetItem });
       } catch (error: unknown) {
         await this.handleError({ index, sourceItem, mappedData, error: error as Error });
       }
@@ -114,11 +114,13 @@ export class RestMigrator<Source extends object, Target extends DataObject> {
         if (existed) throw new RangeError(`Duplicate value for unique field '${key}': ${value}`);
       } else if (isEmpty(value)) {
         continue;
-      } else if (model && !dryRun)
+      } else if (model)
         try {
           const relatedStore = new model();
 
-          const savedValue = await relatedStore.updateOne(value);
+          const savedValue = dryRun
+            ? (value as Awaited<ReturnType<typeof relatedStore.updateOne>>)
+            : await relatedStore.updateOne(value);
 
           await onRelationSave(value, savedValue);
 
