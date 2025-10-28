@@ -11,11 +11,15 @@ import {
   TargetPatch,
 } from './types';
 
-export class RestMigrator<Source extends object, Target extends DataObject> {
+export class RestMigrator<
+  Source extends object,
+  Target extends DataObject,
+  SourceOption extends object | undefined = {},
+> {
   dryRun = false;
 
   constructor(
-    private dataSource: () => Iterable<Source> | AsyncIterable<Source>,
+    private dataSource: (option?: SourceOption) => Iterable<Source> | AsyncIterable<Source>,
     private TargetModel: Constructor<ListModel<Target>>,
     private fieldMapping: MigrationSchema<Source, Target>,
     private eventBus: MigrationEventBus<Source, Target> = new ConsoleLogger<Source, Target>(),
@@ -24,13 +28,13 @@ export class RestMigrator<Source extends object, Target extends DataObject> {
   /**
    * Main migration method that yields progress information
    */
-  async *boot({ dryRun = this.dryRun }: BootOption = {}) {
+  async *boot({ dryRun = this.dryRun, sourceOption }: BootOption<SourceOption> = {}) {
     this.dryRun = dryRun;
 
     const targetStore = new this.TargetModel();
     let index = 0;
 
-    for await (const sourceItem of this.dataSource()) {
+    for await (const sourceItem of this.dataSource(sourceOption)) {
       let mappedData: Partial<Target> | undefined;
 
       try {

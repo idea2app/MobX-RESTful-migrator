@@ -33,6 +33,7 @@ export type MigrationEventBus<Source extends object, Target extends object> = Re
   (progress: MigrationProgress<Source, Target>) => Promise<void>
 >;
 
-export interface BootOption {
+export interface BootOption<SourceOption extends object | undefined = {}> {
   dryRun?: boolean;
+  sourceOption?: SourceOption;
 }
