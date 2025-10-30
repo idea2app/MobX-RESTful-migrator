@@ -25,9 +25,9 @@ MobX-RESTful-migrator is a TypeScript library that provides a flexible data migr
 npm install mobx-restful mobx-restful-migrator
 ```
 
-## Usage Example: Article migration
+## Usage Example: Database migration
 
-The typical use case is migrating Article data with the following schema:
+The typical use case is migrating data between 2 databases via RESTful API:
 
 - **Source**: Article table with Title, Keywords, Content, Author, Email fields
 - **Target**: Keywords field splits into Category string & Tags array, Author & Email fields map to User table
@@ -204,6 +204,42 @@ const migratorWithCustomLogger = new RestMigrator(
   mapping,
   new CustomEventBus(),
 );
+```
+
+## Usage Example: Data crawler
+
+A simple data crawler that fetches data from a RESTful API and saves it to a local YAML file:
+
+```typescript
+import { RestMigrator, YAMLListModel } from 'mobx-restful-migrator';
+import { sleep } from 'web-utility';
+
+interface CrawledData {
+  fieldA: string;
+  fieldB: number;
+  fieldC: boolean;
+  // ...
+}
+
+async function* someDataSource(): AsyncGenerator<CrawledData> {
+  for (let i = 1; i <= 100; i++) {
+    const response = await fetch(`https://api.example.com/page/${i}`);
+
+    yield* await response.json();
+  }
+}
+
+const crawler = new RestMigrator(
+  someDataSource,
+  new YAMLListModel({ baseURI: '.data/crawled.yml' }),
+  {
+    fieldA: 'fieldA',
+    fieldB: 'fieldB',
+    fieldC: 'fieldC',
+    // ...
+  },
+);
+for await (const item of crawler.boot()) await sleep();
 ```
 
 ## Four Mapping Types
