@@ -221,7 +221,7 @@ interface CrawledData {
   // ...
 }
 
-async function* someDataSource(): AsyncGenerator<CrawledData> {
+async function* dataSource(): AsyncGenerator<CrawledData> {
   for (let i = 1; i <= 100; i++) {
     const response = await fetch(`https://api.example.com/page/${i}`);
 
@@ -229,16 +229,18 @@ async function* someDataSource(): AsyncGenerator<CrawledData> {
   }
 }
 
-const crawler = new RestMigrator(
-  someDataSource,
-  new YAMLListModel({ baseURI: '.data/crawled.yml' }),
-  {
-    fieldA: 'fieldA',
-    fieldB: 'fieldB',
-    fieldC: 'fieldC',
-    // ...
-  },
-);
+class TargetListModel extends YAMLListModel<CrawledData> {
+  constructor() {
+    super('.data/crawled.yml');
+  }
+}
+
+const crawler = new RestMigrator(dataSource, TargetListModel, {
+  fieldA: 'fieldA',
+  fieldB: 'fieldB',
+  fieldC: 'fieldC',
+  // ...
+});
 for await (const item of crawler.boot()) await sleep();
 ```
 
