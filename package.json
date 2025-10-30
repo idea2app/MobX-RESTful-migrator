@@ -1,6 +1,6 @@
 {
   "name": "mobx-restful-migrator",
-  "version": "0.1.4",
+  "version": "0.2.0",
   "license": "LGPL-2.1-or-later",
   "author": "shiy2008@gmail.com",
   "description": "Data Migration framework based on MobX-RESTful",
@@ -24,16 +24,19 @@
   "types": "dist/index.d.ts",
   "main": "dist/index.js",
   "dependencies": {
+    "fs-extra": "^11.3.2",
     "mobx": "^6.15.0",
-    "mobx-restful": "^2.1.4"
+    "mobx-restful": "^2.1.4",
+    "yaml": "^2.8.1"
   },
   "peerDependencies": {
     "core-js": ">=3"
   },
   "devDependencies": {
     "@eslint/js": "^9.38.0",
+    "@types/fs-extra": "^11.0.4",
     "@types/jest": "^29.5.14",
-    "@types/node": "^22.18.12",
+    "@types/node": "^22.18.13",
     "core-js": "^3.46.0",
     "eslint": "^9.38.0",
     "eslint-config-prettier": "^10.1.8",
